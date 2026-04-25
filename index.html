@@ -70,7 +70,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.12';
+const APP_VERSION = 'v0.13';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -2404,8 +2404,8 @@ function CycleSection({ cycle, entries, isCurrent, open, onToggle, openCats, onT
                                                                         <th className="text-left p-2">Date</th>
                                                                         <th className="text-left p-2">Course</th>
                                                                         <th className="text-left p-2">Status</th>
-                                                                        <th className="text-right p-2">{cat.label.split('—')[0].trim()}</th>
-                                                                        <th className="text-right p-2">Total credits</th>
+                                                                        <th className="text-right p-2">Credits</th>
+                                                                        <th className="text-right p-2">Total</th>
                                                                         <th></th>
                                                                     </tr>
                                                                 </thead>
