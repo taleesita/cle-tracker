@@ -69,7 +69,7 @@ const GOOGLE_API_KEY = 'AIzaSyAseNwLvaN-3Rl6qjJR13zW08VtlmrEU-c';
 const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token';
 
-const APP_VERSION = 'v0.5';
+const APP_VERSION = 'v0.6';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -146,10 +146,31 @@ function cycleSummary(cycle, entries) {
     const totalEarnedThisCycle = Object.values(cats).reduce((a, c) => a + c.earned, 0);
     const totalCarryInApplied = Object.values(cats).reduce((a, c) => a + c.carryInApplied, 0);
     const totalApplied = totalEarnedThisCycle + totalCarryInApplied;
-    const totalStillNeeded = Math.max(0, totalRequired - totalApplied);
+
+    // Per-category mandatory shortfalls.
+    const mandatoryShortfalls = {};
+    let mandatoryShortfallTotal = 0;
+    for (const cat of CATEGORIES) {
+        const s = cats[cat.id];
+        if (cat.required > 0 && s.applied < cat.required) {
+            const gap = cat.required - s.applied;
+            mandatoryShortfalls[cat.id] = gap;
+            mandatoryShortfallTotal += gap;
+        }
+    }
+
+    const generalShortfall = Math.max(0, totalRequired - totalApplied);
+    // True still-needed = the larger of "missing total credits" and "missing mandatory credits".
+    // (Filling mandatory categories also adds to total, so they overlap.)
+    const totalStillNeeded = Math.max(generalShortfall, mandatoryShortfallTotal);
+
     const totalSurplus = Math.max(0, totalApplied - totalRequired);
     const totalCarryOutMax = Math.min(totalSurplus, CARRYOVER_TOTAL_MAX);
-    return { totalRequired, totalEarnedThisCycle, totalCarryInApplied, totalApplied, totalStillNeeded, totalSurplus, totalCarryOutMax, categoryStatus: cats };
+    return {
+        totalRequired, totalEarnedThisCycle, totalCarryInApplied, totalApplied,
+        totalStillNeeded, generalShortfall, mandatoryShortfalls, mandatoryShortfallTotal,
+        totalSurplus, totalCarryOutMax, categoryStatus: cats
+    };
 }
 
 function suggestCarryOut(cycle, entries) {
@@ -221,7 +242,7 @@ const KNOWN_CYCLES = [
 ];
 
 // ============================================================
-// SEED DATA — Taly's historical CLE entries, parsed from the original spreadsheet.
+// SEED DATA — Taly's historical CLE entries + carry-in, parsed from the spreadsheet.
 // Loaded by the "Load my historical CLE data" button in Settings.
 // ============================================================
 const SEED_DATA = {
@@ -241,8 +262,14 @@ const SEED_DATA = {
       "startDate": "2017-03-07",
       "endDate": "2018-07-22",
       "totalRequired": 16,
-      "carryIn": {},
-      "carryInApplied": {}
+      "carryIn": {
+        "skills": 1.5,
+        "areas_of_professional_practice": 6
+      },
+      "carryInApplied": {
+        "skills": 1.5,
+        "areas_of_professional_practice": 6
+      }
     },
     {
       "id": "seed-cycle-2018-07-22",
@@ -250,8 +277,12 @@ const SEED_DATA = {
       "startDate": "2018-07-22",
       "endDate": "2020-07-22",
       "totalRequired": 24,
-      "carryIn": {},
-      "carryInApplied": {}
+      "carryIn": {
+        "skills": 5.5
+      },
+      "carryInApplied": {
+        "skills": 5.5
+      }
     },
     {
       "id": "seed-cycle-2020-07-22",
@@ -268,8 +299,17 @@ const SEED_DATA = {
       "startDate": "2022-07-22",
       "endDate": "2024-07-22",
       "totalRequired": 24,
-      "carryIn": {},
-      "carryInApplied": {}
+      "carryIn": {
+        "ethics": 2.5,
+        "law_practice_management": 1.5,
+        "areas_of_professional_practice": 2,
+        "diversity": 4
+      },
+      "carryInApplied": {
+        "ethics": 2.5,
+        "law_practice_management": 1.5,
+        "areas_of_professional_practice": 2
+      }
     },
     {
       "id": "seed-cycle-2024-07-22",
@@ -277,8 +317,16 @@ const SEED_DATA = {
       "startDate": "2024-07-22",
       "endDate": "2026-07-22",
       "totalRequired": 24,
-      "carryIn": {},
-      "carryInApplied": {}
+      "carryIn": {
+        "law_practice_management": 2,
+        "areas_of_professional_practice": 2,
+        "cybersecurity_general": 0.5
+      },
+      "carryInApplied": {
+        "law_practice_management": 2,
+        "areas_of_professional_practice": 2,
+        "cybersecurity_general": 0.5
+      }
     }
   ],
   "entries": [
@@ -1627,6 +1675,64 @@ async function driveUploadFile(token, file, folderId, onProgress) {
     return res;
 }
 
+// List all subfolders under parentId, recursing up to maxDepth levels.
+async function listAllSubfolders(token, parentId, maxDepth = 3) {
+    const out = [];
+    const queue = [{ id: parentId, depth: 0 }];
+    while (queue.length) {
+        const { id, depth } = queue.shift();
+        if (depth >= maxDepth) continue;
+        const q = `'${id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+        let pageToken = '';
+        do {
+            const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=nextPageToken,files(id,name,webViewLink)&pageSize=100${pageToken ? `&pageToken=${pageToken}` : ''}`;
+            const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json());
+            if (resp.error) throw new Error(resp.error.message);
+            for (const f of (resp.files || [])) {
+                out.push({ id: f.id, name: f.name, url: f.webViewLink || `https://drive.google.com/drive/folders/${f.id}` });
+                queue.push({ id: f.id, depth: depth + 1 });
+            }
+            pageToken = resp.nextPageToken || '';
+        } while (pageToken);
+    }
+    return out;
+}
+
+// Auto-match folders to entries by date + keyword overlap.
+function extractDateFromFolderName(name) {
+    const s = String(name || '');
+    // yyyy.mm.dd / yyyy-mm-dd / yyyy_mm_dd
+    let m = s.match(/(20\d{2})[.\-_/](\d{1,2})[.\-_/](\d{1,2})/);
+    if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    // m/d/yyyy or m.d.yy etc.
+    m = s.match(/(\d{1,2})[.\-_/](\d{1,2})[.\-_/](\d{2,4})/);
+    if (m) {
+        let yr = m[3]; if (yr.length === 2) yr = '20' + yr;
+        return `${yr}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+    }
+    return null;
+}
+const STOPWORDS = new Set('a an and the of in on at to for with about from by as is its cle credits cert certificate annual symposium'.split(/\s+/));
+function tokenizeForMatch(s) {
+    return Array.from(new Set(String(s||'').toLowerCase().split(/[^a-z0-9]+/).filter(t => t && t.length > 2 && !STOPWORDS.has(t))));
+}
+function scoreFolderEntry(entry, folder) {
+    let score = 0;
+    if (folder.parsedDate) {
+        if (folder.parsedDate === entry.date) score += 3;
+        else {
+            const diff = Math.abs(new Date(folder.parsedDate) - new Date(entry.date)) / 86400000;
+            if (diff <= 1) score += 2;
+            else if (diff <= 7) score += 0.5;
+        }
+    }
+    const eKw = tokenizeForMatch(entry.name);
+    const fKw = folder.keywords || tokenizeForMatch(folder.name);
+    const overlap = eKw.filter(t => fKw.includes(t)).length;
+    if (overlap > 0 && eKw.length > 0) score += overlap / Math.max(eKw.length, fKw.length);
+    return score;
+}
+
 // ============================================================
 // FIREBASE INIT (lazy — only after config is set)
 // ============================================================
@@ -1809,146 +1915,234 @@ function SignIn({ auth }) {
 // ============================================================
 // DASHBOARD
 // ============================================================
-function CycleDashboard({ cycle, entries, onEditCarryIn, onPlanCarryOut, onEditEntry }) {
-    const [drillCat, setDrillCat] = useState(null);
-    if (!cycle) return <div className="p-6 text-slate-500">No cycle selected.</div>;
-    const summary = cycleSummary(cycle, entries);
+// Entries in a cycle that contributed credits to a given category.
+function contributorsForCategory(entries, cycleId, categoryId) {
+    const out = [];
+    for (const e of entries) {
+        if (e.cycleId !== cycleId) continue;
+        const ec = entryCreditsByCategory(e);
+        if (ec[categoryId] && ec[categoryId] > 0) out.push({ entry: e, credits: ec[categoryId] });
+    }
+    out.sort((a, b) => (a.entry.date < b.entry.date ? 1 : -1));
+    return out;
+}
 
-    // Entries in this cycle that contributed credits to a given category.
-    function contributorsFor(categoryId) {
-        const out = [];
-        for (const e of entries) {
-            if (e.cycleId !== cycle.id) continue;
-            const ec = entryCreditsByCategory(e);
-            if (ec[categoryId] && ec[categoryId] > 0) {
-                out.push({ entry: e, credits: ec[categoryId] });
-            }
-        }
-        out.sort((a, b) => (a.entry.date < b.entry.date ? 1 : -1));
-        return out;
+function CycleDashboard({ cycles, entries, onEditCarryIn, onPlanCarryOut, onEditEntry }) {
+    const today = new Date().toISOString().slice(0, 10);
+    // Sort: newest cycle (latest startDate) at the top.
+    const sortedCycles = useMemo(() => [...cycles].sort((a, b) => (a.startDate < b.startDate ? 1 : -1)), [cycles]);
+    const currentCycleId = useMemo(() => {
+        const inRange = cycles.find(c => today >= c.startDate && today <= c.endDate);
+        return (inRange || sortedCycles[0])?.id;
+    }, [cycles, sortedCycles, today]);
+
+    // Default: only the current/newest cycle is expanded.
+    const [openCycles, setOpenCycles] = useState(() => new Set([currentCycleId].filter(Boolean)));
+    const [openCats, setOpenCats] = useState(() => new Set()); // composite key: cycleId|catId
+
+    // If the seed loads after mount (cycles change), re-default to current cycle expanded.
+    useEffect(() => {
+        if (currentCycleId && openCycles.size === 0) setOpenCycles(new Set([currentCycleId]));
+    }, [currentCycleId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    function toggleCycle(id) {
+        setOpenCycles(s => { const ns = new Set(s); ns.has(id) ? ns.delete(id) : ns.add(id); return ns; });
+    }
+    function toggleCat(cycleId, catId) {
+        const k = `${cycleId}|${catId}`;
+        setOpenCats(s => { const ns = new Set(s); ns.has(k) ? ns.delete(k) : ns.add(k); return ns; });
+    }
+    function expandAll() { setOpenCycles(new Set(cycles.map(c => c.id))); }
+    function collapseAll() { setOpenCycles(new Set()); setOpenCats(new Set()); }
+    function expandAllCatsIn(cycleId) {
+        setOpenCats(s => { const ns = new Set(s); for (const c of CATEGORIES) ns.add(`${cycleId}|${c.id}`); return ns; });
+    }
+    function collapseAllCatsIn(cycleId) {
+        setOpenCats(s => { const ns = new Set(s); for (const c of CATEGORIES) ns.delete(`${cycleId}|${c.id}`); return ns; });
     }
 
+    if (cycles.length === 0) return <div className="p-6 text-slate-500">No cycles yet. Add one in <strong>Cycles</strong> or load historical data in <strong>Settings</strong>.</div>;
+
     return (
-        <section className="p-4 sm:p-6 space-y-6">
-            <header className="flex items-center justify-between flex-wrap gap-3">
-                <div>
-                    <h2 className="text-2xl font-bold">{cycle.label || `${cycle.startDate} → ${cycle.endDate}`}</h2>
-                    <div className="text-sm text-slate-500">{cycle.startDate} → {cycle.endDate}</div>
-                </div>
-                <div className="flex gap-2">
-                    <button className="bg-white border px-3 py-1.5 rounded text-sm hover:bg-slate-50" onClick={onEditCarryIn}>
-                        Edit carry-in
-                    </button>
-                    <button className="bg-white border px-3 py-1.5 rounded text-sm hover:bg-slate-50" onClick={onPlanCarryOut}>
-                        Plan carry-out
-                    </button>
+        <section className="p-4 sm:p-6 space-y-3">
+            <header className="flex items-center justify-between flex-wrap gap-2">
+                <h2 className="text-2xl font-bold">Cycles</h2>
+                <div className="flex gap-3 text-xs">
+                    <button className="text-indigo-700 hover:underline" onClick={expandAll}>Expand all</button>
+                    <span className="text-slate-300">·</span>
+                    <button className="text-indigo-700 hover:underline" onClick={collapseAll}>Collapse all</button>
                 </div>
             </header>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-                <Stat label="Required"            value={summary.totalRequired} />
-                <Stat label="Earned"              value={summary.totalEarnedThisCycle} />
-                <Stat label="Carry-in applied"    value={summary.totalCarryInApplied} />
-                <Stat label="Total applied"       value={summary.totalApplied} />
-                <Stat label="Still needed"        value={summary.totalStillNeeded} tone={summary.totalStillNeeded > 0 ? 'warn' : 'good'} />
-                <Stat label="Surplus"             value={summary.totalSurplus} tone="muted" />
-                <Stat label="Carry-out cap"       value={summary.totalCarryOutMax} tone="muted" sublabel={`max ${CARRYOVER_TOTAL_MAX}`} />
-            </div>
+            {sortedCycles.map(cycle => (
+                <CycleSection
+                    key={cycle.id}
+                    cycle={cycle}
+                    entries={entries}
+                    isCurrent={cycle.id === currentCycleId}
+                    open={openCycles.has(cycle.id)}
+                    onToggle={() => toggleCycle(cycle.id)}
+                    openCats={openCats}
+                    onToggleCat={(catId) => toggleCat(cycle.id, catId)}
+                    onExpandAllCats={() => expandAllCatsIn(cycle.id)}
+                    onCollapseAllCats={() => collapseAllCatsIn(cycle.id)}
+                    onEditCarryIn={() => onEditCarryIn(cycle.id)}
+                    onPlanCarryOut={() => onPlanCarryOut(cycle.id)}
+                    onEditEntry={onEditEntry}
+                />
+            ))}
+        </section>
+    );
+}
 
-            <div className="bg-white rounded-lg border overflow-hidden">
-                <table className="w-full text-sm">
-                    <thead className="bg-slate-50 text-slate-700">
-                        <tr>
-                            <th className="text-left p-2 px-3">Category</th>
-                            <th className="text-right p-2 px-3">Required</th>
-                            <th className="text-right p-2 px-3">Carry-in available</th>
-                            <th className="text-right p-2 px-3">Carry-in applied</th>
-                            <th className="text-right p-2 px-3">Earned</th>
-                            <th className="text-right p-2 px-3">Total applied</th>
-                            <th className="text-right p-2 px-3">Still needed</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {CATEGORIES.map(cat => {
-                            const s = summary.categoryStatus[cat.id];
-                            const contribCount = contributorsFor(cat.id).length;
-                            return (
-                                <tr key={cat.id} className={`border-t cursor-pointer hover:bg-indigo-50/40 ${s.stillNeeded > 0 ? 'row-warn' : ''}`} onClick={() => setDrillCat(cat.id)}>
-                                    <td className="p-2 px-3">
-                                        <div className="font-medium text-indigo-700 hover:underline">{cat.label}</div>
-                                        <div className="text-xs text-slate-500">
-                                            {cat.note && <span>{cat.note} </span>}
-                                            <span>{contribCount} {contribCount === 1 ? 'entry' : 'entries'}</span>
-                                        </div>
-                                    </td>
-                                    <td className="p-2 px-3 text-right num">{s.required || ''}</td>
-                                    <td className="p-2 px-3 text-right num">{s.carryIn || ''}</td>
-                                    <td className="p-2 px-3 text-right num">{s.carryInApplied || ''}</td>
-                                    <td className="p-2 px-3 text-right num">{s.earned || ''}</td>
-                                    <td className="p-2 px-3 text-right num font-semibold">{s.applied || ''}</td>
-                                    <td className={`p-2 px-3 text-right num ${s.stillNeeded > 0 ? 'text-amber-700 font-semibold' : 'text-slate-400'}`}>
-                                        {s.stillNeeded || ''}
-                                    </td>
+function CycleSection({ cycle, entries, isCurrent, open, onToggle, openCats, onToggleCat, onExpandAllCats, onCollapseAllCats, onEditCarryIn, onPlanCarryOut, onEditEntry }) {
+    const summary = cycleSummary(cycle, entries);
+
+    return (
+        <div className={`bg-white rounded-lg border overflow-hidden ${isCurrent ? 'ring-1 ring-indigo-200' : ''}`}>
+            <button onClick={onToggle} className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-slate-50 text-left">
+                <span className="text-slate-400 text-xs w-3">{open ? '▼' : '▶'}</span>
+                <div className="flex-1 min-w-0">
+                    <div className="font-bold flex items-center gap-2 flex-wrap">
+                        <span>{cycle.label || `${cycle.startDate} → ${cycle.endDate}`}</span>
+                        {isCurrent && <span className="text-xs bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-medium">current</span>}
+                    </div>
+                    <div className="text-xs text-slate-500">{cycle.startDate} → {cycle.endDate}</div>
+                </div>
+                <div className="text-sm flex items-center gap-3 flex-shrink-0">
+                    <span className="num"><strong>{fmt(summary.totalApplied)}</strong> <span className="text-slate-400">/ {summary.totalRequired}</span></span>
+                    {summary.totalStillNeeded > 0
+                        ? <span className="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium" title={Object.entries(summary.mandatoryShortfalls).map(([id, gap]) => `${gap} ${CATEGORY_BY_ID[id]?.label || id}`).join(', ') || `Need ${fmt(summary.totalStillNeeded)} more credits`}>
+                            need {fmt(summary.totalStillNeeded)}
+                          </span>
+                        : <span className="text-xs bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-medium">complete</span>}
+                </div>
+            </button>
+
+            {open && (
+                <div className="border-t p-4 space-y-4 bg-slate-50/40">
+                    <div className="flex gap-2 flex-wrap">
+                        <button className="bg-white border px-3 py-1.5 rounded text-xs hover:bg-slate-50" onClick={onEditCarryIn}>Edit carry-in</button>
+                        <button className="bg-white border px-3 py-1.5 rounded text-xs hover:bg-slate-50" onClick={onPlanCarryOut}>Plan carry-out</button>
+                        <span className="ml-auto flex gap-2 text-xs text-slate-500 items-center">
+                            <button className="hover:underline text-indigo-700" onClick={onExpandAllCats}>Expand all categories</button>
+                            <span className="text-slate-300">·</span>
+                            <button className="hover:underline text-indigo-700" onClick={onCollapseAllCats}>Collapse</button>
+                        </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                        <a href="https://nysba.org/new-york-cle-requirements/" target="_blank" rel="noreferrer" className="block hover:opacity-80" title="Open NY CLE requirements (NYSBA)">
+                            <Stat label="Required ↗" value={summary.totalRequired} sublabel="rules" />
+                        </a>
+                        <Stat label="Earned"            value={summary.totalEarnedThisCycle} />
+                        <Stat label="Carry-in applied"  value={summary.totalCarryInApplied} />
+                        <Stat label="Total applied"     value={summary.totalApplied} />
+                        <Stat label="Still needed"      value={summary.totalStillNeeded} tone={summary.totalStillNeeded > 0 ? 'warn' : 'good'} />
+                        <Stat label="Surplus"           value={summary.totalSurplus} tone="muted" />
+                        <Stat label="Carry-out cap"     value={summary.totalCarryOutMax} tone="muted" sublabel={`max ${CARRYOVER_TOTAL_MAX}`} />
+                    </div>
+
+                    {summary.totalStillNeeded > 0 && (
+                        <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm">
+                            <div className="font-medium text-amber-900 mb-1">Still needed: {fmt(summary.totalStillNeeded)} credit{summary.totalStillNeeded === 1 ? '' : 's'}</div>
+                            <ul className="text-xs text-amber-800 space-y-0.5">
+                                {Object.entries(summary.mandatoryShortfalls).map(([id, gap]) => (
+                                    <li key={id}>• {fmt(gap)} more in <strong>{CATEGORY_BY_ID[id]?.label || id}</strong> (mandatory)</li>
+                                ))}
+                                {summary.generalShortfall > summary.mandatoryShortfallTotal && (
+                                    <li>• {fmt(summary.generalShortfall - summary.mandatoryShortfallTotal)} more general credits in any category</li>
+                                )}
+                            </ul>
+                        </div>
+                    )}
+
+                    <div className="bg-white rounded-lg border overflow-hidden">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50 text-slate-700">
+                                <tr>
+                                    <th className="text-left p-2 px-3">Category</th>
+                                    <th className="text-right p-2 px-3">Required</th>
+                                    <th className="text-right p-2 px-3">Carry-in available</th>
+                                    <th className="text-right p-2 px-3">Carry-in applied</th>
+                                    <th className="text-right p-2 px-3">Earned</th>
+                                    <th className="text-right p-2 px-3">Total applied</th>
+                                    <th className="text-right p-2 px-3">Still needed</th>
                                 </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-            </div>
-
-            <Modal open={!!drillCat} onClose={() => setDrillCat(null)} wide>
-                {drillCat && (() => {
-                    const cat = CATEGORY_BY_ID[drillCat];
-                    const contribs = contributorsFor(drillCat);
-                    const total = contribs.reduce((a, c) => a + c.credits, 0);
-                    return (
-                        <div className="p-6 space-y-3">
-                            <div className="flex items-baseline justify-between flex-wrap gap-2">
-                                <h2 className="text-xl font-bold">{cat.label}</h2>
-                                <div className="text-sm text-slate-600">
-                                    {contribs.length} {contribs.length === 1 ? 'entry' : 'entries'} · <strong className="num">{fmt(total)}</strong> credits earned
-                                    {cat.required > 0 && <> · <strong>{cat.required}</strong> required</>}
-                                </div>
-                            </div>
-                            {cat.note && <p className="text-sm text-slate-600">{cat.note}</p>}
-                            {contribs.length === 0 ? (
-                                <div className="text-sm text-slate-500 bg-slate-50 rounded p-4">No entries in this cycle have credits in this category yet.</div>
-                            ) : (
-                                <table className="w-full text-sm border rounded">
-                                    <thead className="bg-slate-50">
-                                        <tr>
-                                            <th className="text-left p-2 px-3">Date</th>
-                                            <th className="text-left p-2 px-3">Course</th>
-                                            <th className="text-left p-2 px-3">Status</th>
-                                            <th className="text-right p-2 px-3">{cat.label.split('—')[0].trim()}</th>
-                                            <th className="text-right p-2 px-3">Total credits</th>
-                                            <th></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {contribs.map(({ entry, credits }) => (
-                                            <tr key={entry.id} className="border-t">
-                                                <td className="p-2 px-3 num">{entry.date}</td>
-                                                <td className="p-2 px-3">{entry.name}</td>
-                                                <td className="p-2 px-3"><StatusBadge status={entry.status} /></td>
-                                                <td className="p-2 px-3 text-right num font-semibold">{fmt(credits)}</td>
-                                                <td className="p-2 px-3 text-right num text-slate-500">{fmt(entryTotalCredits(entry))}</td>
-                                                <td className="p-2 px-3 text-right">
-                                                    <button className="text-indigo-700 hover:underline text-xs" onClick={() => { setDrillCat(null); onEditEntry?.(entry); }}>edit</button>
+                            </thead>
+                            <tbody>
+                                {CATEGORIES.map(cat => {
+                                    const s = summary.categoryStatus[cat.id];
+                                    const contribs = contributorsForCategory(entries, cycle.id, cat.id);
+                                    const catKey = `${cycle.id}|${cat.id}`;
+                                    const catOpen = openCats.has(catKey);
+                                    return (
+                                        <React.Fragment key={cat.id}>
+                                            <tr className={`border-t cursor-pointer hover:bg-indigo-50/40 ${s.stillNeeded > 0 ? 'row-warn' : ''} ${catOpen ? 'bg-indigo-50/40' : ''}`} onClick={() => onToggleCat(cat.id)}>
+                                                <td className="p-2 px-3">
+                                                    <div className="font-medium flex items-center gap-2">
+                                                        <span className="text-slate-400 text-xs w-3">{catOpen ? '▼' : '▶'}</span>
+                                                        <span className="text-indigo-700">{cat.label}</span>
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 ml-5">
+                                                        {cat.note && <span>{cat.note} · </span>}
+                                                        <span>{contribs.length} {contribs.length === 1 ? 'entry' : 'entries'}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-2 px-3 text-right num">{s.required || ''}</td>
+                                                <td className="p-2 px-3 text-right num">{s.carryIn || ''}</td>
+                                                <td className="p-2 px-3 text-right num">{s.carryInApplied || ''}</td>
+                                                <td className="p-2 px-3 text-right num">{s.earned || ''}</td>
+                                                <td className="p-2 px-3 text-right num font-semibold">{s.applied || ''}</td>
+                                                <td className={`p-2 px-3 text-right num ${s.stillNeeded > 0 ? 'text-amber-700 font-semibold' : 'text-slate-400'}`}>
+                                                    {s.stillNeeded || ''}
                                                 </td>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )}
-                            <div className="flex justify-end pt-2 border-t">
-                                <button className="px-3 py-2 rounded border" onClick={() => setDrillCat(null)}>Close</button>
-                            </div>
-                        </div>
-                    );
-                })()}
-            </Modal>
-        </section>
+                                            {catOpen && (
+                                                <tr className="border-t bg-slate-50/60">
+                                                    <td colSpan={7} className="p-3">
+                                                        {contribs.length === 0 ? (
+                                                            <div className="text-xs text-slate-500 italic">No entries contributed credits to this category in this cycle.</div>
+                                                        ) : (
+                                                            <table className="w-full text-xs bg-white rounded border">
+                                                                <thead className="bg-slate-50 text-slate-600">
+                                                                    <tr>
+                                                                        <th className="text-left p-2">Date</th>
+                                                                        <th className="text-left p-2">Course</th>
+                                                                        <th className="text-left p-2">Status</th>
+                                                                        <th className="text-right p-2">{cat.label.split('—')[0].trim()}</th>
+                                                                        <th className="text-right p-2">Total credits</th>
+                                                                        <th></th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {contribs.map(({ entry, credits }) => (
+                                                                        <tr key={entry.id} className="border-t">
+                                                                            <td className="p-2 num">{entry.date}</td>
+                                                                            <td className="p-2">{entry.name}</td>
+                                                                            <td className="p-2"><StatusBadge status={entry.status} /></td>
+                                                                            <td className="p-2 text-right num font-semibold">{fmt(credits)}</td>
+                                                                            <td className="p-2 text-right num text-slate-500">{fmt(entryTotalCredits(entry))}</td>
+                                                                            <td className="p-2 text-right">
+                                                                                <button className="text-indigo-700 hover:underline" onClick={(e) => { e.stopPropagation(); onEditEntry?.(entry); }}>edit</button>
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -2610,6 +2804,65 @@ function SettingsView({ state, onReplaceState, user, onSignOut }) {
         setConfirmDisconnect(false);
     }
 
+    // Drive auto-match
+    const [autoMatchBusy, setAutoMatchBusy] = useState(false);
+    const [autoMatchPreview, setAutoMatchPreview] = useState(null);
+    async function runAutoMatch() {
+        if (!driveParent) { setMsg('Connect Drive first.'); return; }
+        setAutoMatchBusy(true);
+        setMsg('Listing Drive folders…');
+        try {
+            const token = await ensureDriveToken();
+            const folders = await listAllSubfolders(token, driveParent.id);
+            const indexed = folders.map(f => ({ ...f, parsedDate: extractDateFromFolderName(f.name), keywords: tokenizeForMatch(f.name) }));
+            const unlinked = state.entries.filter(e => !e.driveUrl);
+            const matches = [];
+            const lowConfidence = [];
+            for (const entry of unlinked) {
+                const candidates = indexed
+                    .map(f => ({ folder: f, score: scoreFolderEntry(entry, f) }))
+                    .filter(c => c.score > 0.4)
+                    .sort((a, b) => b.score - a.score);
+                if (candidates.length === 0) continue;
+                const top = candidates[0];
+                if (top.score >= 2) {
+                    matches.push({ entry, folder: top.folder, score: top.score, alts: candidates.slice(1, 3).map(c => c.folder) });
+                } else {
+                    lowConfidence.push({ entry, folder: top.folder, score: top.score, alts: candidates.slice(1, 3).map(c => c.folder) });
+                }
+            }
+            setAutoMatchPreview({ matches, lowConfidence, totalUnlinked: unlinked.length, totalFolders: folders.length });
+            setMsg(`Scanned ${folders.length} folders. ${matches.length} confident matches, ${lowConfidence.length} maybes, ${unlinked.length - matches.length - lowConfidence.length} no match.`);
+        } catch (e) {
+            console.error(e);
+            setMsg('Error: ' + e.message);
+        } finally {
+            setAutoMatchBusy(false);
+        }
+    }
+    function applyAutoMatch(includeLowConfidence) {
+        if (!autoMatchPreview) return;
+        const updates = new Map();
+        for (const m of autoMatchPreview.matches) updates.set(m.entry.id, m.folder);
+        if (includeLowConfidence) for (const m of autoMatchPreview.lowConfidence) updates.set(m.entry.id, m.folder);
+        const newEntries = state.entries.map(e => {
+            const f = updates.get(e.id);
+            if (!f) return e;
+            return { ...e, driveUrl: f.url };
+        });
+        onReplaceState({ ...state, entries: newEntries });
+        setAutoMatchPreview(null);
+        setMsg(`Linked ${updates.size} entries to Drive folders.`);
+    }
+    function rejectMatch(entryId) {
+        if (!autoMatchPreview) return;
+        setAutoMatchPreview(p => ({
+            ...p,
+            matches: p.matches.filter(m => m.entry.id !== entryId),
+            lowConfidence: p.lowConfidence.filter(m => m.entry.id !== entryId)
+        }));
+    }
+
     return (
         <section className="p-4 sm:p-6 space-y-4 max-w-3xl">
             <h2 className="text-2xl font-bold">Settings</h2>
@@ -2780,6 +3033,77 @@ function SettingsView({ state, onReplaceState, user, onSignOut }) {
                     </>
                 )}
                 {driveErr && <div className="text-red-600 text-xs">{driveErr}</div>}
+
+                {driveParent && (
+                    <div className="border-t pt-3 space-y-2">
+                        <div className="text-sm font-medium text-slate-800">Auto-match Drive folders to entries</div>
+                        <p className="text-xs text-slate-600">
+                            Scans subfolders under your CLE Tracker root and matches each unlinked entry by date in the folder name (like <code>2025.11.18 - …</code>) plus keyword overlap.
+                        </p>
+                        <button
+                            className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50 bg-indigo-50 border-indigo-200 text-indigo-800 font-medium"
+                            onClick={runAutoMatch} disabled={autoMatchBusy}>
+                            {autoMatchBusy ? 'Scanning…' : 'Auto-match Drive folders'}
+                        </button>
+
+                        {autoMatchPreview && (
+                            <div className="bg-indigo-50 border border-indigo-200 rounded p-3 space-y-2 mt-2">
+                                <div className="text-sm">
+                                    Scanned <strong>{autoMatchPreview.totalFolders}</strong> folders ·{' '}
+                                    <strong>{autoMatchPreview.matches.length}</strong> confident matches ·{' '}
+                                    <strong>{autoMatchPreview.lowConfidence.length}</strong> maybes ·{' '}
+                                    {autoMatchPreview.totalUnlinked - autoMatchPreview.matches.length - autoMatchPreview.lowConfidence.length} no match
+                                </div>
+
+                                {autoMatchPreview.matches.length > 0 && (
+                                    <details open>
+                                        <summary className="cursor-pointer text-xs font-semibold text-emerald-800">Confident matches ({autoMatchPreview.matches.length})</summary>
+                                        <ul className="mt-1 text-xs space-y-1 max-h-64 overflow-y-auto">
+                                            {autoMatchPreview.matches.map(m => (
+                                                <li key={m.entry.id} className="bg-white rounded p-2 border flex gap-2 items-start">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="font-medium truncate">{m.entry.name}</div>
+                                                        <div className="text-slate-500 text-[11px] truncate">→ {m.folder.name}</div>
+                                                    </div>
+                                                    <button className="text-red-600 hover:underline text-[11px]" onClick={() => rejectMatch(m.entry.id)}>reject</button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </details>
+                                )}
+
+                                {autoMatchPreview.lowConfidence.length > 0 && (
+                                    <details>
+                                        <summary className="cursor-pointer text-xs font-semibold text-amber-800">Maybes ({autoMatchPreview.lowConfidence.length}) — review these</summary>
+                                        <ul className="mt-1 text-xs space-y-1 max-h-64 overflow-y-auto">
+                                            {autoMatchPreview.lowConfidence.map(m => (
+                                                <li key={m.entry.id} className="bg-white rounded p-2 border flex gap-2 items-start">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="font-medium truncate">{m.entry.name}</div>
+                                                        <div className="text-slate-500 text-[11px] truncate">→ {m.folder.name} <span className="text-amber-700">(score {m.score.toFixed(1)})</span></div>
+                                                    </div>
+                                                    <button className="text-red-600 hover:underline text-[11px]" onClick={() => rejectMatch(m.entry.id)}>reject</button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </details>
+                                )}
+
+                                <div className="flex gap-2 pt-1">
+                                    <button className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold" onClick={() => applyAutoMatch(false)} disabled={autoMatchPreview.matches.length === 0}>
+                                        Apply confident ({autoMatchPreview.matches.length})
+                                    </button>
+                                    {autoMatchPreview.lowConfidence.length > 0 && (
+                                        <button className="px-3 py-1.5 rounded border text-sm hover:bg-white" onClick={() => applyAutoMatch(true)}>
+                                            Apply all ({autoMatchPreview.matches.length + autoMatchPreview.lowConfidence.length})
+                                        </button>
+                                    )}
+                                    <button className="px-3 py-1.5 rounded border text-sm hover:bg-white" onClick={() => setAutoMatchPreview(null)}>Cancel</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             <div className="bg-white rounded-lg border p-4 space-y-2 text-sm text-slate-600">
@@ -2802,8 +3126,8 @@ function App({ user, db, onSignOut }) {
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState('dashboard');
     const [editingEntry, setEditingEntry] = useState(null); // entry being edited; or {} for new
-    const [carryInOpen, setCarryInOpen] = useState(false);
-    const [carryOutOpen, setCarryOutOpen] = useState(false);
+    const [carryInCycleId, setCarryInCycleId] = useState(null);   // null = closed; cycleId = open for that cycle
+    const [carryOutCycleId, setCarryOutCycleId] = useState(null);
 
     // Load on mount
     useEffect(() => {
@@ -2854,9 +3178,9 @@ function App({ user, db, onSignOut }) {
     function deleteCycle(id) { persist({ ...state, cycles: state.cycles.filter(c => c.id !== id) }); }
 
     function saveCarryIn({ carryIn, carryInApplied }) {
-        const next = { ...state, cycles: state.cycles.map(c => c.id === activeCycleId ? { ...c, carryIn, carryInApplied } : c) };
+        const next = { ...state, cycles: state.cycles.map(c => c.id === carryInCycleId ? { ...c, carryIn, carryInApplied } : c) };
         persist(next);
-        setCarryInOpen(false);
+        setCarryInCycleId(null);
     }
 
     function applyCarryOut({ allocation, targetCycleId }) {
@@ -2867,7 +3191,7 @@ function App({ user, db, onSignOut }) {
             return c;
         }) };
         persist(next);
-        setCarryOutOpen(false);
+        setCarryOutCycleId(null);
     }
 
     if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading…</div>;
@@ -2900,10 +3224,10 @@ function App({ user, db, onSignOut }) {
             <main className="max-w-6xl mx-auto">
                 {tab === 'dashboard' && (
                     <CycleDashboard
-                        cycle={activeCycle}
+                        cycles={state.cycles}
                         entries={state.entries}
-                        onEditCarryIn={() => setCarryInOpen(true)}
-                        onPlanCarryOut={() => setCarryOutOpen(true)}
+                        onEditCarryIn={(cycleId) => setCarryInCycleId(cycleId)}
+                        onPlanCarryOut={(cycleId) => setCarryOutCycleId(cycleId)}
                         onEditEntry={(e) => setEditingEntry(e)}
                     />
                 )}
@@ -2949,13 +3273,19 @@ function App({ user, db, onSignOut }) {
                 )}
             </Modal>
 
-            <Modal open={carryInOpen} onClose={() => setCarryInOpen(false)}>
-                {activeCycle && <CarryInEditor cycle={activeCycle} onSave={saveCarryIn} onClose={() => setCarryInOpen(false)} />}
+            <Modal open={!!carryInCycleId} onClose={() => setCarryInCycleId(null)}>
+                {(() => {
+                    const c = state.cycles.find(x => x.id === carryInCycleId);
+                    return c && <CarryInEditor cycle={c} onSave={saveCarryIn} onClose={() => setCarryInCycleId(null)} />;
+                })()}
             </Modal>
 
-            <Modal open={carryOutOpen} onClose={() => setCarryOutOpen(false)} wide>
-                {activeCycle && <CarryOutPlanner cycle={activeCycle} cycles={state.cycles} entries={state.entries}
-                    onApply={applyCarryOut} onClose={() => setCarryOutOpen(false)} />}
+            <Modal open={!!carryOutCycleId} onClose={() => setCarryOutCycleId(null)} wide>
+                {(() => {
+                    const c = state.cycles.find(x => x.id === carryOutCycleId);
+                    return c && <CarryOutPlanner cycle={c} cycles={state.cycles} entries={state.entries}
+                        onApply={applyCarryOut} onClose={() => setCarryOutCycleId(null)} />;
+                })()}
             </Modal>
         </div>
     );
