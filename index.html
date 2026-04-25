@@ -70,7 +70,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.8';
+const APP_VERSION = 'v0.9';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -125,10 +125,17 @@ function earnedByCategory(entries, cycleId, { includeUncounted = false } = {}) {
     return totals;
 }
 
+// Returns the categories applicable to a given cycle. Falls back to global CATEGORIES
+// if the cycle doesn't have its own list (newly-created cycles).
+function getCategoriesForCycle(cycle) {
+    if (cycle?.categories?.length) return cycle.categories;
+    return CATEGORIES;
+}
+
 function categoryStatus(cycle, entries) {
     const earned = earnedByCategory(entries, cycle.id);
     const out = {};
-    for (const cat of CATEGORIES) {
+    for (const cat of getCategoriesForCycle(cycle)) {
         const required = cat.required;
         const carryIn = Number(cycle.carryIn?.[cat.id] || 0);
         const carryInApplied = Number(cycle.carryInApplied?.[cat.id] || 0);
@@ -143,15 +150,16 @@ function categoryStatus(cycle, entries) {
 
 function cycleSummary(cycle, entries) {
     const cats = categoryStatus(cycle, entries);
+    const cycleCats = getCategoriesForCycle(cycle);
     const totalRequired = cycle.totalRequired || TOTAL_CREDITS_REQUIRED;
     const totalEarnedThisCycle = Object.values(cats).reduce((a, c) => a + c.earned, 0);
+    const totalCarryIn = Object.values(cats).reduce((a, c) => a + c.carryIn, 0);
     const totalCarryInApplied = Object.values(cats).reduce((a, c) => a + c.carryInApplied, 0);
     const totalApplied = totalEarnedThisCycle + totalCarryInApplied;
 
-    // Per-category mandatory shortfalls.
     const mandatoryShortfalls = {};
     let mandatoryShortfallTotal = 0;
-    for (const cat of CATEGORIES) {
+    for (const cat of cycleCats) {
         const s = cats[cat.id];
         if (cat.required > 0 && s.applied < cat.required) {
             const gap = cat.required - s.applied;
@@ -161,14 +169,11 @@ function cycleSummary(cycle, entries) {
     }
 
     const generalShortfall = Math.max(0, totalRequired - totalApplied);
-    // True still-needed = the larger of "missing total credits" and "missing mandatory credits".
-    // (Filling mandatory categories also adds to total, so they overlap.)
     const totalStillNeeded = Math.max(generalShortfall, mandatoryShortfallTotal);
-
     const totalSurplus = Math.max(0, totalApplied - totalRequired);
     const totalCarryOutMax = Math.min(totalSurplus, CARRYOVER_TOTAL_MAX);
     return {
-        totalRequired, totalEarnedThisCycle, totalCarryInApplied, totalApplied,
+        totalRequired, totalEarnedThisCycle, totalCarryIn, totalCarryInApplied, totalApplied,
         totalStillNeeded, generalShortfall, mandatoryShortfalls, mandatoryShortfallTotal,
         totalSurplus, totalCarryOutMax, categoryStatus: cats
     };
@@ -176,17 +181,19 @@ function cycleSummary(cycle, entries) {
 
 function suggestCarryOut(cycle, entries) {
     const summary = cycleSummary(cycle, entries);
+    const cycleCats = getCategoriesForCycle(cycle);
+    const catById = Object.fromEntries(cycleCats.map(c => [c.id, c]));
     const perCategorySurplus = {};
     for (const [id, s] of Object.entries(summary.categoryStatus)) {
         perCategorySurplus[id] = Math.max(0, s.applied - s.required);
     }
-    // Allocate from non-required categories first to keep required totals "exactly met" in history.
-    const order = Object.keys(perCategorySurplus).sort((a, b) => CATEGORY_BY_ID[a].required - CATEGORY_BY_ID[b].required);
+    // Allocate from non-required categories first.
+    const order = Object.keys(perCategorySurplus).sort((a, b) => (catById[a]?.required || 0) - (catById[b]?.required || 0));
     const allocation = {};
     let remaining = Math.min(summary.totalSurplus, CARRYOVER_TOTAL_MAX);
     for (const id of order) {
         if (remaining <= 0) break;
-        const cap = CATEGORY_BY_ID[id].carryCap;
+        const cap = catById[id]?.carryCap ?? 6;
         const take = Math.min(perCategorySurplus[id], cap, remaining);
         if (take > 0) { allocation[id] = take; remaining -= take; }
     }
@@ -198,11 +205,15 @@ function validateCarryOut(cycle, entries, allocation) {
     const total = Object.values(allocation).reduce((a, b) => a + Number(b || 0), 0);
     if (total > CARRYOVER_TOTAL_MAX) errs.push(`Total carry-over (${total}) exceeds the ${CARRYOVER_TOTAL_MAX}-credit limit.`);
     const summary = cycleSummary(cycle, entries);
+    const cycleCats = getCategoriesForCycle(cycle);
+    const catById = Object.fromEntries(cycleCats.map(c => [c.id, c]));
     for (const [id, amount] of Object.entries(allocation)) {
-        const cap = CATEGORY_BY_ID[id]?.carryCap ?? 6;
-        if (amount > cap) errs.push(`${CATEGORY_BY_ID[id].label}: carry-over ${amount} exceeds cap of ${cap}.`);
-        const surplus = Math.max(0, summary.categoryStatus[id].applied - summary.categoryStatus[id].required);
-        if (amount > surplus) errs.push(`${CATEGORY_BY_ID[id].label}: carry-over ${amount} exceeds surplus ${surplus}.`);
+        const cap = catById[id]?.carryCap ?? 6;
+        const label = catById[id]?.label || CATEGORY_BY_ID[id]?.label || id;
+        if (amount > cap) errs.push(`${label}: carry-over ${amount} exceeds cap of ${cap}.`);
+        const s = summary.categoryStatus[id];
+        const surplus = s ? Math.max(0, s.applied - s.required) : 0;
+        if (amount > surplus) errs.push(`${label}: carry-over ${amount} exceeds surplus ${surplus}.`);
     }
     return errs;
 }
@@ -243,7 +254,7 @@ const KNOWN_CYCLES = [
 ];
 
 // ============================================================
-// SEED DATA — Taly's historical CLE entries + carry-in.
+// SEED DATA — Taly's historical CLE entries, carry-in, per-cycle categories.
 // ============================================================
 const SEED_DATA = {
   "cycles": [
@@ -254,7 +265,27 @@ const SEED_DATA = {
       "endDate": "2017-03-06",
       "totalRequired": 16,
       "carryIn": {},
-      "carryInApplied": {}
+      "carryInApplied": {},
+      "categories": [
+        {
+          "id": "ethics",
+          "label": "Ethics & Professionalism",
+          "required": 3,
+          "carryCap": 4
+        },
+        {
+          "id": "skills",
+          "label": "Skills",
+          "required": 6,
+          "carryCap": 6
+        },
+        {
+          "id": "areas_of_professional_practice",
+          "label": "Areas of Professional Practice",
+          "required": 7,
+          "carryCap": 6
+        }
+      ]
     },
     {
       "id": "seed-cycle-2017-03-07",
@@ -269,7 +300,27 @@ const SEED_DATA = {
       "carryInApplied": {
         "skills": 1.5,
         "areas_of_professional_practice": 6
-      }
+      },
+      "categories": [
+        {
+          "id": "ethics",
+          "label": "Ethics & Professionalism",
+          "required": 3,
+          "carryCap": 4
+        },
+        {
+          "id": "skills",
+          "label": "Skills",
+          "required": 6,
+          "carryCap": 6
+        },
+        {
+          "id": "areas_of_professional_practice",
+          "label": "Areas of Professional Practice",
+          "required": 7,
+          "carryCap": 6
+        }
+      ]
     },
     {
       "id": "seed-cycle-2018-07-22",
@@ -282,7 +333,33 @@ const SEED_DATA = {
       },
       "carryInApplied": {
         "skills": 5.5
-      }
+      },
+      "categories": [
+        {
+          "id": "ethics",
+          "label": "Ethics & Professionalism",
+          "required": 4,
+          "carryCap": 4
+        },
+        {
+          "id": "skills",
+          "label": "Skills",
+          "required": 0,
+          "carryCap": 6
+        },
+        {
+          "id": "areas_of_professional_practice",
+          "label": "Areas of Professional Practice",
+          "required": 0,
+          "carryCap": 6
+        },
+        {
+          "id": "diversity",
+          "label": "Diversity, Inclusion & Elimination of Bias",
+          "required": 1,
+          "carryCap": 1
+        }
+      ]
     },
     {
       "id": "seed-cycle-2020-07-22",
@@ -291,7 +368,39 @@ const SEED_DATA = {
       "endDate": "2022-07-22",
       "totalRequired": 24,
       "carryIn": {},
-      "carryInApplied": {}
+      "carryInApplied": {},
+      "categories": [
+        {
+          "id": "ethics",
+          "label": "Ethics & Professionalism",
+          "required": 4,
+          "carryCap": 4
+        },
+        {
+          "id": "skills",
+          "label": "Skills",
+          "required": 0,
+          "carryCap": 6
+        },
+        {
+          "id": "law_practice_management",
+          "label": "Law Practice Management",
+          "required": 0,
+          "carryCap": 6
+        },
+        {
+          "id": "areas_of_professional_practice",
+          "label": "Areas of Professional Practice",
+          "required": 0,
+          "carryCap": 6
+        },
+        {
+          "id": "diversity",
+          "label": "Diversity, Inclusion & Elimination of Bias",
+          "required": 1,
+          "carryCap": 1
+        }
+      ]
     },
     {
       "id": "seed-cycle-2022-07-22",
@@ -309,7 +418,52 @@ const SEED_DATA = {
         "ethics": 2.5,
         "law_practice_management": 1.5,
         "areas_of_professional_practice": 2
-      }
+      },
+      "categories": [
+        {
+          "id": "ethics",
+          "label": "Ethics & Professionalism",
+          "required": 4,
+          "carryCap": 4
+        },
+        {
+          "id": "cybersecurity_ethics",
+          "label": "Cybersecurity, Privacy & Data Protection — Ethics",
+          "required": 0,
+          "carryCap": 4,
+          "note": "Counts toward Ethics requirement."
+        },
+        {
+          "id": "skills",
+          "label": "Skills",
+          "required": 0,
+          "carryCap": 6
+        },
+        {
+          "id": "law_practice_management",
+          "label": "Law Practice Management",
+          "required": 0,
+          "carryCap": 6
+        },
+        {
+          "id": "areas_of_professional_practice",
+          "label": "Areas of Professional Practice",
+          "required": 0,
+          "carryCap": 6
+        },
+        {
+          "id": "diversity",
+          "label": "Diversity, Inclusion & Elimination of Bias",
+          "required": 1,
+          "carryCap": 1
+        },
+        {
+          "id": "cybersecurity_general",
+          "label": "Cybersecurity, Privacy & Data Protection — General",
+          "required": 1,
+          "carryCap": 1
+        }
+      ]
     },
     {
       "id": "seed-cycle-2024-07-22",
@@ -326,7 +480,52 @@ const SEED_DATA = {
         "law_practice_management": 2,
         "areas_of_professional_practice": 2,
         "cybersecurity_general": 0.5
-      }
+      },
+      "categories": [
+        {
+          "id": "ethics",
+          "label": "Ethics & Professionalism",
+          "required": 4,
+          "carryCap": 4
+        },
+        {
+          "id": "cybersecurity_ethics",
+          "label": "Cybersecurity, Privacy & Data Protection — Ethics",
+          "required": 0,
+          "carryCap": 4,
+          "note": "Counts toward Ethics requirement."
+        },
+        {
+          "id": "skills",
+          "label": "Skills",
+          "required": 0,
+          "carryCap": 6
+        },
+        {
+          "id": "law_practice_management",
+          "label": "Law Practice Management",
+          "required": 0,
+          "carryCap": 6
+        },
+        {
+          "id": "areas_of_professional_practice",
+          "label": "Areas of Professional Practice",
+          "required": 0,
+          "carryCap": 6
+        },
+        {
+          "id": "diversity",
+          "label": "Diversity, Inclusion & Elimination of Bias",
+          "required": 1,
+          "carryCap": 1
+        },
+        {
+          "id": "cybersecurity_general",
+          "label": "Cybersecurity, Privacy & Data Protection — General",
+          "required": 1,
+          "carryCap": 1
+        }
+      ]
     }
   ],
   "entries": [
@@ -1421,6 +1620,69 @@ const SEED_DATA = {
       ],
       "driveUrl": "",
       "notes": ""
+    },
+    {
+      "id": "seed-synth-1",
+      "cycleId": "seed-cycle-2016-03-07",
+      "name": "Historical credits (from spreadsheet summary)",
+      "date": "2016-03-07",
+      "location": "",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "ethics",
+          "credits": 8
+        },
+        {
+          "categoryId": "skills",
+          "credits": 15
+        },
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 27
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Auto-generated to match the per-category Earned totals from your spreadsheet's cycle summary table. The original individual CLE entries weren't listed in the source data; you can edit or split this into real entries later."
+    },
+    {
+      "id": "seed-synth-2",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "Historical credits (from spreadsheet summary)",
+      "date": "2022-07-22",
+      "location": "",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "cybersecurity_ethics",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Auto-generated to match the per-category Earned totals from your spreadsheet's cycle summary table. The original individual CLE entries weren't listed in the source data; you can edit or split this into real entries later."
+    },
+    {
+      "id": "seed-synth-3",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "Historical credits (from spreadsheet summary)",
+      "date": "2024-07-22",
+      "location": "",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "diversity",
+          "credits": 2
+        },
+        {
+          "categoryId": "cybersecurity_general",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Auto-generated to match the per-category Earned totals from your spreadsheet's cycle summary table. The original individual CLE entries weren't listed in the source data; you can edit or split this into real entries later."
     }
   ]
 };
@@ -2021,26 +2283,58 @@ function CycleSection({ cycle, entries, isCurrent, open, onToggle, openCats, onT
 
             {open && (
                 <div className="border-t p-4 space-y-4 bg-slate-50/40">
-                    <div className="flex gap-2 flex-wrap">
-                        <button className="bg-white border px-3 py-1.5 rounded text-xs hover:bg-slate-50" onClick={onEditCarryIn}>Edit carry-in</button>
-                        <button className="bg-white border px-3 py-1.5 rounded text-xs hover:bg-slate-50" onClick={onPlanCarryOut}>Plan carry-out</button>
-                        <span className="ml-auto flex gap-2 text-xs text-slate-500 items-center">
-                            <button className="hover:underline text-indigo-700" onClick={onExpandAllCats}>Expand all categories</button>
-                            <span className="text-slate-300">·</span>
-                            <button className="hover:underline text-indigo-700" onClick={onCollapseAllCats}>Collapse</button>
-                        </span>
+                    <div className="flex gap-3 items-center justify-end text-xs text-slate-500">
+                        <button className="hover:underline text-indigo-700" onClick={onExpandAllCats}>Expand all categories</button>
+                        <span className="text-slate-300">·</span>
+                        <button className="hover:underline text-indigo-700" onClick={onCollapseAllCats}>Collapse</button>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                         <a href="https://nysba.org/new-york-cle-requirements/" target="_blank" rel="noreferrer" className="block hover:opacity-80" title="Open NY CLE requirements (NYSBA)">
                             <Stat label="Required ↗" value={summary.totalRequired} sublabel="rules" />
                         </a>
-                        <Stat label="Earned"            value={summary.totalEarnedThisCycle} />
-                        <Stat label="Carry-in applied"  value={summary.totalCarryInApplied} />
-                        <Stat label="Total applied"     value={summary.totalApplied} />
-                        <Stat label="Still needed"      value={summary.totalStillNeeded} tone={summary.totalStillNeeded > 0 ? 'warn' : 'good'} />
-                        <Stat label="Surplus"           value={summary.totalSurplus} tone="muted" />
-                        <Stat label="Carry-out cap"     value={summary.totalCarryOutMax} tone="muted" sublabel={`max ${CARRYOVER_TOTAL_MAX}`} />
+                        <Stat label="Earned this cycle" value={summary.totalEarnedThisCycle} />
+
+                        {/* Combined: Carry-in available + applied. Click → Edit Carry-in */}
+                        <button onClick={onEditCarryIn} className="rounded-lg border bg-white p-3 hover:bg-indigo-50/50 hover:border-indigo-300 text-left transition group">
+                            <div className="text-xs uppercase tracking-wide text-slate-500 flex items-center justify-between">
+                                <span>Carry-in</span>
+                                <span className="text-indigo-700 text-[10px] opacity-0 group-hover:opacity-100">edit →</span>
+                            </div>
+                            <div className="flex items-baseline gap-3 mt-1">
+                                <div>
+                                    <div className="text-2xl font-bold num">{fmt(summary.totalCarryInApplied)}</div>
+                                    <div className="text-[10px] text-slate-500">applied</div>
+                                </div>
+                                <div className="text-slate-300">/</div>
+                                <div>
+                                    <div className="text-lg font-semibold num text-slate-500">{fmt(summary.totalCarryIn)}</div>
+                                    <div className="text-[10px] text-slate-500">available</div>
+                                </div>
+                            </div>
+                        </button>
+
+                        <Stat label="Total applied" value={summary.totalApplied} />
+                        <Stat label="Still needed" value={summary.totalStillNeeded} tone={summary.totalStillNeeded > 0 ? 'warn' : 'good'} />
+
+                        {/* Combined: Surplus + Carry-out cap. Click → Plan Carry-out */}
+                        <button onClick={onPlanCarryOut} className="rounded-lg border bg-white p-3 hover:bg-indigo-50/50 hover:border-indigo-300 text-left transition group sm:col-span-2 lg:col-span-2">
+                            <div className="text-xs uppercase tracking-wide text-slate-500 flex items-center justify-between">
+                                <span>Plan carry-out to next cycle</span>
+                                <span className="text-indigo-700 text-[10px] opacity-0 group-hover:opacity-100">plan →</span>
+                            </div>
+                            <div className="flex items-baseline gap-3 mt-1">
+                                <div>
+                                    <div className="text-2xl font-bold num">{fmt(summary.totalSurplus)}</div>
+                                    <div className="text-[10px] text-slate-500">surplus credits</div>
+                                </div>
+                                <div className="text-slate-300">→</div>
+                                <div>
+                                    <div className="text-lg font-semibold num text-slate-700">{fmt(summary.totalCarryOutMax)}</div>
+                                    <div className="text-[10px] text-slate-500">eligible to carry forward (cap {CARRYOVER_TOTAL_MAX})</div>
+                                </div>
+                            </div>
+                        </button>
                     </div>
 
                     {summary.totalStillNeeded > 0 && (
@@ -2048,7 +2342,7 @@ function CycleSection({ cycle, entries, isCurrent, open, onToggle, openCats, onT
                             <div className="font-medium text-amber-900 mb-1">Still needed: {fmt(summary.totalStillNeeded)} credit{summary.totalStillNeeded === 1 ? '' : 's'}</div>
                             <ul className="text-xs text-amber-800 space-y-0.5">
                                 {Object.entries(summary.mandatoryShortfalls).map(([id, gap]) => (
-                                    <li key={id}>• {fmt(gap)} more in <strong>{CATEGORY_BY_ID[id]?.label || id}</strong> (mandatory)</li>
+                                    <li key={id}>• {fmt(gap)} more in <strong>{CATEGORY_BY_ID[id]?.label || getCategoriesForCycle(cycle).find(c => c.id === id)?.label || id}</strong> (mandatory)</li>
                                 ))}
                                 {summary.generalShortfall > summary.mandatoryShortfallTotal && (
                                     <li>• {fmt(summary.generalShortfall - summary.mandatoryShortfallTotal)} more general credits in any category</li>
@@ -2071,7 +2365,7 @@ function CycleSection({ cycle, entries, isCurrent, open, onToggle, openCats, onT
                                 </tr>
                             </thead>
                             <tbody>
-                                {CATEGORIES.map(cat => {
+                                {getCategoriesForCycle(cycle).map(cat => {
                                     const s = summary.categoryStatus[cat.id];
                                     const contribs = contributorsForCategory(entries, cycle.id, cat.id);
                                     const catKey = `${cycle.id}|${cat.id}`;
@@ -2476,11 +2770,12 @@ function Field({ label, children, full }) {
 function CarryInEditor({ cycle, onSave, onClose }) {
     const [carryIn, setCarryIn] = useState({ ...(cycle.carryIn || {}) });
     const [carryInApplied, setCarryInApplied] = useState({ ...(cycle.carryInApplied || {}) });
+    const cycleCats = getCategoriesForCycle(cycle);
     const totalIn = Object.values(carryIn).reduce((a, b) => a + Number(b || 0), 0);
     const totalApplied = Object.values(carryInApplied).reduce((a, b) => a + Number(b || 0), 0);
     const errs = [];
     if (totalIn > CARRYOVER_TOTAL_MAX) errs.push(`Total carry-in (${totalIn}) exceeds the ${CARRYOVER_TOTAL_MAX}-credit cap.`);
-    for (const cat of CATEGORIES) {
+    for (const cat of cycleCats) {
         const a = carryInApplied[cat.id] || 0;
         const c = carryIn[cat.id] || 0;
         if (a > c) errs.push(`${cat.label}: applied (${a}) > available (${c}).`);
@@ -2502,7 +2797,7 @@ function CarryInEditor({ cycle, onSave, onClose }) {
                     </tr>
                 </thead>
                 <tbody>
-                    {CATEGORIES.map(cat => (
+                    {cycleCats.map(cat => (
                         <tr key={cat.id} className="border-t">
                             <td className="p-2">{cat.label}</td>
                             <td className="p-2 text-right">
@@ -2542,6 +2837,7 @@ function CarryOutPlanner({ cycle, entries, cycles, onApply, onClose }) {
         const next = cycles.find(c => c.id !== cycle.id && c.startDate >= cycle.endDate);
         return next?.id || '';
     });
+    const cycleCats = getCategoriesForCycle(cycle);
     const errs = validateCarryOut(cycle, entries, allocation);
     const total = Object.values(allocation).reduce((a, b) => a + Number(b || 0), 0);
 
@@ -2562,7 +2858,7 @@ function CarryOutPlanner({ cycle, entries, cycles, onApply, onClose }) {
                     </tr>
                 </thead>
                 <tbody>
-                    {CATEGORIES.map(cat => {
+                    {cycleCats.map(cat => {
                         const surplus = suggestion.perCategorySurplus[cat.id] || 0;
                         return (
                             <tr key={cat.id} className="border-t">
