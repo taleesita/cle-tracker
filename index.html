@@ -69,7 +69,7 @@ const GOOGLE_API_KEY = 'AIzaSyAseNwLvaN-3Rl6qjJR13zW08VtlmrEU-c';
 const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token';
 
-const APP_VERSION = 'v0.3';
+const APP_VERSION = 'v0.5';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -220,6 +220,1164 @@ const KNOWN_CYCLES = [
     { label: '2024–2026 Cycle',              startDate: '2024-07-22', endDate: '2026-07-22', totalRequired: 24 }
 ];
 
+// ============================================================
+// SEED DATA — Taly's historical CLE entries, parsed from the original spreadsheet.
+// Loaded by the "Load my historical CLE data" button in Settings.
+// ============================================================
+const SEED_DATA = {
+  "cycles": [
+    {
+      "id": "seed-cycle-2016-03-07",
+      "label": "First Newly Admitted Period",
+      "startDate": "2016-03-07",
+      "endDate": "2017-03-06",
+      "totalRequired": 16,
+      "carryIn": {},
+      "carryInApplied": {}
+    },
+    {
+      "id": "seed-cycle-2017-03-07",
+      "label": "Second Newly Admitted Period",
+      "startDate": "2017-03-07",
+      "endDate": "2018-07-22",
+      "totalRequired": 16,
+      "carryIn": {},
+      "carryInApplied": {}
+    },
+    {
+      "id": "seed-cycle-2018-07-22",
+      "label": "2018-2020 Cycle",
+      "startDate": "2018-07-22",
+      "endDate": "2020-07-22",
+      "totalRequired": 24,
+      "carryIn": {},
+      "carryInApplied": {}
+    },
+    {
+      "id": "seed-cycle-2020-07-22",
+      "label": "2020-2022 Cycle",
+      "startDate": "2020-07-22",
+      "endDate": "2022-07-22",
+      "totalRequired": 24,
+      "carryIn": {},
+      "carryInApplied": {}
+    },
+    {
+      "id": "seed-cycle-2022-07-22",
+      "label": "2022-2024 Cycle",
+      "startDate": "2022-07-22",
+      "endDate": "2024-07-22",
+      "totalRequired": 24,
+      "carryIn": {},
+      "carryInApplied": {}
+    },
+    {
+      "id": "seed-cycle-2024-07-22",
+      "label": "2024-2026 Cycle",
+      "startDate": "2024-07-22",
+      "endDate": "2026-07-22",
+      "totalRequired": 24,
+      "carryIn": {},
+      "carryInApplied": {}
+    }
+  ],
+  "entries": [
+    {
+      "id": "seed-entry-1",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "The 29th Annual Fordham Sports Law Symposium",
+      "date": "2026-01-30",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "ethics",
+          "credits": 0.5
+        },
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 2.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-2",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "The 33rd Intellectual Property, Media, and Entertainment Law Journal Symposium-The Meaning of Ownership - Rethinking Intellectual Property, Creativity, and Control in the Age of Innovation",
+      "date": "2026-02-20",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 2.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-3",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "The State and Future of Diversity, Equity, and Inclusion in Education\nPanel 1: Attacks on Diversity, Equity and Inclusion in Education in 2025\nPanel 2: How States and Educational Institutions Can Forge a Path to Protect Their Diverse Students",
+      "date": "2025-03-27",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 0.5
+        },
+        {
+          "categoryId": "diversity",
+          "credits": 1
+        },
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 0.5
+        },
+        {
+          "categoryId": "diversity",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-4",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "Fordham Sports Law Forum's 28th Annual Symposium",
+      "date": "2025-03-28",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "ethics",
+          "credits": 1
+        },
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 3
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-5",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "The Evolving ESG Landscape in the Second Trump Administration",
+      "date": "2025-04-08",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-6",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "Deborah Archer's Dividing Lines: How Transportation Infrastructure Reinforces Racial Inequality",
+      "date": "2025-04-22",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 0.5
+        },
+        {
+          "categoryId": "diversity",
+          "credits": 0.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-7",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "The Fifth Annual Reidenberg Lecture",
+      "date": "2025-04-29",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 0.4
+        },
+        {
+          "categoryId": "cybersecurity_ethics",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-8",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "Constructed Movements-Extraction and Resistance in Mexican Migrant Communities",
+      "date": "2025-09-25",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "ethics",
+          "credits": 1
+        },
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 0.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-9",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "Legal Tech Lunch ‘n’ Learn - Defending Against Deepfakes, Cybersecurity & AI - Materials",
+      "date": "2025-09-30",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "cybersecurity_general",
+          "credits": 1.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Unparsed credit fragments: privacy and data protection ethics"
+    },
+    {
+      "id": "seed-entry-10",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "Legal Tech Lunch ‘n’ Learn - Foundational AI Concepts for Attorney",
+      "date": "2025-11-05",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 0.5
+        },
+        {
+          "categoryId": "cybersecurity_general",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Unparsed credit fragments: privacy | & data protection - general"
+    },
+    {
+      "id": "seed-entry-11",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "Rethinking the Corporation in the Era of AI",
+      "date": "2025-11-07",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "ethics",
+          "credits": 0.5
+        },
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 2.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-12",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "The Legal Scaffolding of a Dance Career",
+      "date": "2025-11-14",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 2
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-13",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "Center on Asian Americans and the Law - A Candid Assessment of Wong Kim Ark and Its Modern-Day Implications",
+      "date": "2025-11-18",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        },
+        {
+          "categoryId": "diversity",
+          "credits": 0.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-14",
+      "cycleId": "seed-cycle-2024-07-22",
+      "name": "Before Bridge the Gap - Skills Charting a Path Forward - Employment and Humanitarian Immigration Strategies Today",
+      "date": "2025-12-18",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "counted",
+      "credits": [
+        {
+          "categoryId": "skills",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-15",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "Generative AI: Ethical Considerations for Lawyers",
+      "date": "2024-01-26",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "ethics",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-16",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "Urban Law Journal Symposium With People Struggling and the Law Failing, What are the Solutions to the Access to Justice Crisis in America?",
+      "date": "2024-02-09",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "law_practice_management",
+          "credits": 6
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-17",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "The Center on Race, Law and Justice presents Demand the Impossible - A Conversation Between Author Robert Tsai and ACLU President Deborah Archer - CLE Code",
+      "date": "2024-03-11",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "diversity",
+          "credits": 1.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Unparsed credit fragments: inclusion | & elimination of bias"
+    },
+    {
+      "id": "seed-entry-18",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "Gumshoes and Gigabytes-The Idaho College Murders and Beyond",
+      "date": "2024-03-19",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "cybersecurity_general",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Unparsed credit fragments: Privacy & Data Protection-General"
+    },
+    {
+      "id": "seed-entry-19",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "Should You Pay the Ransom?",
+      "date": "2024-03-28",
+      "location": "Columbia - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "cybersecurity_general",
+          "credits": 1
+        },
+        {
+          "categoryId": "cybersecurity_general",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Unparsed credit fragments: Privacy & Data Protection-Ethics | Privacy & Data Protection-General"
+    },
+    {
+      "id": "seed-entry-20",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "Reenactment-The Amistad",
+      "date": "2024-04-02",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "diversity",
+          "credits": 1.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Unparsed credit fragments: inclusion | & elimination of bias"
+    },
+    {
+      "id": "seed-entry-21",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "Fordham and Race-Looking Backward, Looking Forward - CLE cert?",
+      "date": "2024-04-08",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "diversity",
+          "credits": 1.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Unparsed credit fragments: inclusion | & elimination of bias"
+    },
+    {
+      "id": "seed-entry-22",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "Equity in the Energy Transition",
+      "date": "2023-09-20",
+      "location": "NYU - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-23",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "Law Firm and Corporate Diversity after SFFA v Harvard",
+      "date": "2023-09-27",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "diversity",
+          "credits": 1.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Unparsed credit fragments: inclusion | & elimination of bias"
+    },
+    {
+      "id": "seed-entry-24",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "The Past, Present, and Future of AAPIs and Education",
+      "date": "2023-10-05",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-25",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "Concretely Transforming the Legal Profession at All Levels",
+      "date": "2023-10-12",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "diversity",
+          "credits": 1.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Unparsed credit fragments: inclusion | & elimination of bias"
+    },
+    {
+      "id": "seed-entry-26",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "Hip-Hop and the Law",
+      "date": "2023-10-18",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "diversity",
+          "credits": 2
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Unparsed credit fragments: inclusion | & elimination of bias"
+    },
+    {
+      "id": "seed-entry-27",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "A Conversation with Eric L. Muller, Author of Lawyer, Jailer, Ally, Foe: Complicity and Conscience in America’s WWII Concentration Camps",
+      "date": "2023-10-18",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-28",
+      "cycleId": "seed-cycle-2022-07-22",
+      "name": "Youth Power Not Guns",
+      "date": "2023-10-25",
+      "location": "Fordham - virtual",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        },
+        {
+          "categoryId": "diversity",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": "Unparsed credit fragments: inclusion | & elimination of bias"
+    },
+    {
+      "id": "seed-entry-29",
+      "cycleId": "seed-cycle-2020-07-22",
+      "name": "Leaders of Legal - Stepping Up: Your First GC Role In a Time of Widespread Disruption (Episode 1 On Demand))",
+      "date": "2021-08-21",
+      "location": "In-House Focus",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 3
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-30",
+      "cycleId": "seed-cycle-2020-07-22",
+      "name": "The Fight for Gender Justice, Part I: Protecting Gender Identity & Expression for America’s Youth",
+      "date": "2021-10-19",
+      "location": "NYU School of Law",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-31",
+      "cycleId": "seed-cycle-2020-07-22",
+      "name": "The Power of the Prior Conviction",
+      "date": "2021-11-03",
+      "location": "NYU School of Law",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-32",
+      "cycleId": "seed-cycle-2020-07-22",
+      "name": "Addressing Implicit Bias as Standard of Care: A Legal & Ethical Imperative",
+      "date": "2021-11-04",
+      "location": "Columbia Law School",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "diversity",
+          "credits": 1
+        },
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 0.5
+        },
+        {
+          "categoryId": "ethics",
+          "credits": 0.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-33",
+      "cycleId": "seed-cycle-2020-07-22",
+      "name": "Lecture on Race in American Society",
+      "date": "2021-11-10",
+      "location": "NYU School of Law",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-34",
+      "cycleId": "seed-cycle-2020-07-22",
+      "name": "The Racial Muslim: When Racism Quashes Religious Freedom",
+      "date": "2021-11-30",
+      "location": "Fordham",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "diversity",
+          "credits": 1.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-35",
+      "cycleId": "seed-cycle-2020-07-22",
+      "name": "Jack B. Weinstein: Pioneer in Judging and Justice",
+      "date": "2021-12-02",
+      "location": "Columbia Law School",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 0.5
+        },
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-36",
+      "cycleId": "seed-cycle-2020-07-22",
+      "name": "Leaders of Legal - Re-Engineering the Law Department - Leveraging Change",
+      "date": "2021-12-15",
+      "location": "In-House Focus",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "law_practice_management",
+          "credits": 1.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-37",
+      "cycleId": "seed-cycle-2020-07-22",
+      "name": "From Here to Equality: Reparations for Black Americans in the Twenty First Century\nDiversity and Inclusion Speaker Book Event with Duke University Professor William Darity and his co-author Kirsten Mullen",
+      "date": "2022-01-19",
+      "location": "Fordham",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "diversity",
+          "credits": 1.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-38",
+      "cycleId": "seed-cycle-2020-07-22",
+      "name": "Addressing Implicit Bias as Standard of Care II",
+      "date": "2022-02-10",
+      "location": "Columbia",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        },
+        {
+          "categoryId": "diversity",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-39",
+      "cycleId": "seed-cycle-2020-07-22",
+      "name": "Fordham Urban Law Journal Symposium presents Testing the Limits: Admissions Exams in Urban Public Schools",
+      "date": "2022-02-11",
+      "location": "Fordham",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 4.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-40",
+      "cycleId": "seed-cycle-2020-07-22",
+      "name": "The Fordham Law Review Journal Symposium presents Mass Torts Evolve: The Intersection of Aggregate Litigation and Bankruptcy",
+      "date": "2022-02-25",
+      "location": "Fordham",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 6
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-41",
+      "cycleId": "seed-cycle-2020-07-22",
+      "name": "Dementia and the Law",
+      "date": "2022-03-01",
+      "location": "Fordham",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "ethics",
+          "credits": 6
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-42",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "Standing Guard – Protecting Privilege and Work Product (Ethics credit)",
+      "date": "2020-05-10",
+      "location": "In-House Focus",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "ethics",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-43",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "Ethics and Internal Investigations",
+      "date": "2020-05-17",
+      "location": "In-House Focus",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "ethics",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-44",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "The Importance of Racial Awareness in Leadership (MCCA Event)",
+      "date": "2020-05-17",
+      "location": "In-House Focus",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "diversity",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-45",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "Innovation in the Legal Space",
+      "date": "2020-05-17",
+      "location": "In-House Focus",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-46",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "Legal Operations: Hot Issues for In-House Counsel",
+      "date": "2020-05-17",
+      "location": "In-House Focus",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-47",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "Corporate Venturing: The Role of In-House Counsel",
+      "date": "2020-05-17",
+      "location": "In-House Focus",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-48",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "Product Counseling: How In-House Lawyers Can Help Drive the Business",
+      "date": "2020-05-24",
+      "location": "In-House Focus",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-49",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "The Intersection of Artificial Intelligence and Fintech",
+      "date": "2020-05-24",
+      "location": "In-House Focus",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-50",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "Hosting Content on Your Website? What You Need to Know About Section 230 of the Communications Decency Act",
+      "date": "2020-05-24",
+      "location": "In-House Focus",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-51",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "Social Media: “Influencers” & Disclosures: How to Keep Up with Your Marketing Department",
+      "date": "2020-05-24",
+      "location": "In-House Focus",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-52",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "Staying Out of Trouble 2019-Hot Topics in Ethics & Avoiding Professional Discipline",
+      "date": "2020-05-31",
+      "location": "PLI",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "ethics",
+          "credits": 3.5
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-53",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "Employee Arbitration Agreements: Trends, Developments, and AB 51",
+      "date": "2020-06-07",
+      "location": "In-House Focus",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-54",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "MCLE - Branded Entertainment",
+      "date": "2019-05-01",
+      "location": "Netflix",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-55",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "Ripped from the Headlines-Crime Pays (sometimes)",
+      "date": "2019-05-22",
+      "location": "Netflix",
+      "jurisdiction": "CA",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-56",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "We're Doing An International Production...What Could Possibly Go Wrong?",
+      "date": "2019-05-22",
+      "location": "Netflix",
+      "jurisdiction": "CA",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-57",
+      "cycleId": "seed-cycle-2018-07-22",
+      "name": "It Takes A Village-Consumer Products From Script To Shelf",
+      "date": "2019-05-22",
+      "location": "Netflix",
+      "jurisdiction": "CA",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-58",
+      "cycleId": "seed-cycle-2017-03-07",
+      "name": "CLE: Behind the Crime - When Good People Do Wrong",
+      "date": "2017-03-22",
+      "location": "Fordham Law",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "areas_of_professional_practice",
+          "credits": 1
+        },
+        {
+          "categoryId": "ethics",
+          "credits": 1
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-59",
+      "cycleId": "seed-cycle-2017-03-07",
+      "name": "CLE: Working Ethically with Non-Lawyer Professionals in Public Interest Settings",
+      "date": "2017-03-30",
+      "location": "Fordham Law",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "ethics",
+          "credits": 2
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    },
+    {
+      "id": "seed-entry-60",
+      "cycleId": "seed-cycle-2017-03-07",
+      "name": "Her Justice Credits",
+      "date": "2017-08-10",
+      "location": "Her Justice",
+      "jurisdiction": "NY",
+      "status": "cert_received",
+      "credits": [
+        {
+          "categoryId": "skills",
+          "credits": 10
+        }
+      ],
+      "driveUrl": "",
+      "notes": ""
+    }
+  ]
+};
+
+
 function matchCategoryFromText(desc) {
     const d = String(desc || '').toLowerCase();
     // Order matters: more specific patterns first.
@@ -227,7 +1385,7 @@ function matchCategoryFromText(desc) {
     if (/cyber|privacy|data protection/.test(d))             return 'cybersecurity_general';
     if (/diversity|inclusion|elimination of bias/.test(d))   return 'diversity';
     if (/skills/.test(d))                                    return 'skills';
-    if (/law practice management|^lpm$/.test(d))             return 'law_practice_management';
+    if (/law\s*prac\w*\s*management|^lpm$/.test(d))          return 'law_practice_management';
     if (/prof.*prac|professional practice|areas of professional/.test(d)) return 'areas_of_professional_practice';
     if (/ethics|professionalism/.test(d))                    return 'ethics';
     return null;
@@ -281,47 +1439,49 @@ function parseXlsxToEntries(workbook, cycles) {
     const entries = [];
     const unparsed = [];
 
+    // SheetJS auto-trims leading empty columns, so the data rows align with the header row.
+    // Header columns: 0=Course, 1=Date, 2=Credit Type, 3=Location, 4=Jurisdiction, 5=Certificate, 6=Input in table?, 7=Materials?
     for (let i = headerIdx + 1; i < rows.length; i++) {
         const r = rows[i];
-        const colA = r[0];
-        const colB = String(r[1] || '').trim();
-        const colC = r[2];
-        const colD = String(r[3] || '').trim();
-        const colE = String(r[4] || '').trim();
-        const colF = String(r[5] || '').trim();
-        const colG = String(r[6] || '').trim();
-        const colH = String(r[7] || '').trim();
+        const course        = String(r[0] || '').trim();
+        const dateRaw       = r[1];
+        const creditType    = String(r[2] || '').trim();
+        const location      = String(r[3] || '').trim();
+        const jurisdiction  = String(r[4] || '').trim();
+        const cert          = String(r[5] || '').trim();
+        const inTable       = String(r[6] || '').trim();
 
-        // Year-divider rows: only a numeric year in col B and nothing else useful
-        if (!colB && (typeof colC === 'number' || /^\d{4}\.?0*$/.test(String(colC || '')))) continue;
-        if (!colB && !colC) continue;
+        // Year-divider rows: empty course, year in date column, e.g. ["", "2026", "", ...]
+        if (!course && /^\d{4}\.?0*$/.test(String(dateRaw || ''))) continue;
+        // Empty rows
+        if (!course && !dateRaw) continue;
 
-        const dateStr = parseDateCell(colC);
-        if (!colB || !dateStr) continue;
+        const dateStr = parseDateCell(dateRaw);
+        if (!course || !dateStr) continue;
 
-        const { credits, unmatched } = parseCreditTypeText(colD);
+        const { credits, unmatched } = parseCreditTypeText(creditType);
         if (credits.length === 0) {
-            unparsed.push({ rowNumber: i + 1, course: colB, creditType: colD, reason: 'no parseable credits' });
+            unparsed.push({ rowNumber: i + 1, course, creditType, reason: 'no parseable credits' });
             continue;
         }
 
         const cycle = cycles.find(c => dateStr >= c.startDate && dateStr <= c.endDate);
         if (!cycle) {
-            unparsed.push({ rowNumber: i + 1, course: colB, date: dateStr, reason: 'no matching cycle' });
+            unparsed.push({ rowNumber: i + 1, course, date: dateStr, reason: 'no matching cycle' });
             continue;
         }
 
-        const certY = colF.toUpperCase() === 'Y';
-        const inTableY = colG.toUpperCase() === 'Y';
+        const certY = cert.toUpperCase() === 'Y';
+        const inTableY = inTable.toUpperCase() === 'Y';
         const status = (certY && inTableY) ? 'counted' : (certY ? 'cert_received' : 'attended');
 
         entries.push({
             id: uid(),
             cycleId: cycle.id,
-            name: colB,
+            name: course,
             date: dateStr,
-            location: colE,
-            jurisdiction: colF.toUpperCase().match(/^(NY|NJ|CA|FL|TX|MA|DC)$/) ? colF.toUpperCase() : (colF.length <= 4 ? colF.toUpperCase() : 'NY'),
+            location,
+            jurisdiction: jurisdiction.toUpperCase(),
             status,
             credits,
             driveUrl: '',
@@ -649,9 +1809,25 @@ function SignIn({ auth }) {
 // ============================================================
 // DASHBOARD
 // ============================================================
-function CycleDashboard({ cycle, entries, onEditCarryIn, onPlanCarryOut }) {
+function CycleDashboard({ cycle, entries, onEditCarryIn, onPlanCarryOut, onEditEntry }) {
+    const [drillCat, setDrillCat] = useState(null);
     if (!cycle) return <div className="p-6 text-slate-500">No cycle selected.</div>;
     const summary = cycleSummary(cycle, entries);
+
+    // Entries in this cycle that contributed credits to a given category.
+    function contributorsFor(categoryId) {
+        const out = [];
+        for (const e of entries) {
+            if (e.cycleId !== cycle.id) continue;
+            const ec = entryCreditsByCategory(e);
+            if (ec[categoryId] && ec[categoryId] > 0) {
+                out.push({ entry: e, credits: ec[categoryId] });
+            }
+        }
+        out.sort((a, b) => (a.entry.date < b.entry.date ? 1 : -1));
+        return out;
+    }
+
     return (
         <section className="p-4 sm:p-6 space-y-6">
             <header className="flex items-center justify-between flex-wrap gap-3">
@@ -695,11 +1871,15 @@ function CycleDashboard({ cycle, entries, onEditCarryIn, onPlanCarryOut }) {
                     <tbody>
                         {CATEGORIES.map(cat => {
                             const s = summary.categoryStatus[cat.id];
+                            const contribCount = contributorsFor(cat.id).length;
                             return (
-                                <tr key={cat.id} className={`border-t ${s.stillNeeded > 0 ? 'row-warn' : ''}`}>
+                                <tr key={cat.id} className={`border-t cursor-pointer hover:bg-indigo-50/40 ${s.stillNeeded > 0 ? 'row-warn' : ''}`} onClick={() => setDrillCat(cat.id)}>
                                     <td className="p-2 px-3">
-                                        <div className="font-medium">{cat.label}</div>
-                                        {cat.note && <div className="text-xs text-slate-500">{cat.note}</div>}
+                                        <div className="font-medium text-indigo-700 hover:underline">{cat.label}</div>
+                                        <div className="text-xs text-slate-500">
+                                            {cat.note && <span>{cat.note} </span>}
+                                            <span>{contribCount} {contribCount === 1 ? 'entry' : 'entries'}</span>
+                                        </div>
                                     </td>
                                     <td className="p-2 px-3 text-right num">{s.required || ''}</td>
                                     <td className="p-2 px-3 text-right num">{s.carryIn || ''}</td>
@@ -715,6 +1895,59 @@ function CycleDashboard({ cycle, entries, onEditCarryIn, onPlanCarryOut }) {
                     </tbody>
                 </table>
             </div>
+
+            <Modal open={!!drillCat} onClose={() => setDrillCat(null)} wide>
+                {drillCat && (() => {
+                    const cat = CATEGORY_BY_ID[drillCat];
+                    const contribs = contributorsFor(drillCat);
+                    const total = contribs.reduce((a, c) => a + c.credits, 0);
+                    return (
+                        <div className="p-6 space-y-3">
+                            <div className="flex items-baseline justify-between flex-wrap gap-2">
+                                <h2 className="text-xl font-bold">{cat.label}</h2>
+                                <div className="text-sm text-slate-600">
+                                    {contribs.length} {contribs.length === 1 ? 'entry' : 'entries'} · <strong className="num">{fmt(total)}</strong> credits earned
+                                    {cat.required > 0 && <> · <strong>{cat.required}</strong> required</>}
+                                </div>
+                            </div>
+                            {cat.note && <p className="text-sm text-slate-600">{cat.note}</p>}
+                            {contribs.length === 0 ? (
+                                <div className="text-sm text-slate-500 bg-slate-50 rounded p-4">No entries in this cycle have credits in this category yet.</div>
+                            ) : (
+                                <table className="w-full text-sm border rounded">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="text-left p-2 px-3">Date</th>
+                                            <th className="text-left p-2 px-3">Course</th>
+                                            <th className="text-left p-2 px-3">Status</th>
+                                            <th className="text-right p-2 px-3">{cat.label.split('—')[0].trim()}</th>
+                                            <th className="text-right p-2 px-3">Total credits</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {contribs.map(({ entry, credits }) => (
+                                            <tr key={entry.id} className="border-t">
+                                                <td className="p-2 px-3 num">{entry.date}</td>
+                                                <td className="p-2 px-3">{entry.name}</td>
+                                                <td className="p-2 px-3"><StatusBadge status={entry.status} /></td>
+                                                <td className="p-2 px-3 text-right num font-semibold">{fmt(credits)}</td>
+                                                <td className="p-2 px-3 text-right num text-slate-500">{fmt(entryTotalCredits(entry))}</td>
+                                                <td className="p-2 px-3 text-right">
+                                                    <button className="text-indigo-700 hover:underline text-xs" onClick={() => { setDrillCat(null); onEditEntry?.(entry); }}>edit</button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                            <div className="flex justify-end pt-2 border-t">
+                                <button className="px-3 py-2 rounded border" onClick={() => setDrillCat(null)}>Close</button>
+                            </div>
+                        </div>
+                    );
+                })()}
+            </Modal>
         </section>
     );
 }
@@ -726,6 +1959,12 @@ function EntriesView({ entries, cycles, activeCycleId, onAdd, onEdit, onDelete }
     const [filterCycle, setFilterCycle] = useState(activeCycleId || 'all');
     const [filterStatus, setFilterStatus] = useState('all');
     const [search, setSearch] = useState('');
+    const [confirmDel, setConfirmDel] = useState(null); // entry id
+    useEffect(() => {
+        if (!confirmDel) return;
+        const t = setTimeout(() => setConfirmDel(null), 4000);
+        return () => clearTimeout(t);
+    }, [confirmDel]);
 
     const visible = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -802,7 +2041,11 @@ function EntriesView({ entries, cycles, activeCycleId, onAdd, onEdit, onDelete }
                                             : <span className="text-slate-300">—</span>}
                                     </td>
                                     <td className="p-2 px-3 text-right">
-                                        <button className="text-red-600 hover:underline text-xs" onClick={() => { if (confirm('Delete this entry?')) onDelete(e.id); }}>delete</button>
+                                        {confirmDel === e.id ? (
+                                            <button className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-semibold" onClick={() => { onDelete(e.id); setConfirmDel(null); }}>Confirm delete</button>
+                                        ) : (
+                                            <button className="text-red-600 hover:underline text-xs" onClick={() => setConfirmDel(e.id)}>delete</button>
+                                        )}
                                     </td>
                                 </tr>
                             );
@@ -1176,6 +2419,12 @@ function CarryOutPlanner({ cycle, entries, cycles, onApply, onClose }) {
 // ============================================================
 function CyclesManager({ cycles, activeCycleId, onSetActive, onAdd, onUpdate, onDelete }) {
     const [editing, setEditing] = useState(null); // draft cycle being edited or added
+    const [confirmDel, setConfirmDel] = useState(null);
+    useEffect(() => {
+        if (!confirmDel) return;
+        const t = setTimeout(() => setConfirmDel(null), 4000);
+        return () => clearTimeout(t);
+    }, [confirmDel]);
     function startNew() {
         setEditing({ id: uid(), label: '', startDate: '', endDate: '', totalRequired: TOTAL_CREDITS_REQUIRED, carryIn: {}, carryInApplied: {}, _new: true });
     }
@@ -1215,7 +2464,11 @@ function CyclesManager({ cycles, activeCycleId, onSetActive, onAdd, onUpdate, on
                                 </td>
                                 <td className="p-2 px-3 text-right space-x-2">
                                     <button className="text-indigo-700 hover:underline text-xs" onClick={() => setEditing({ ...c })}>edit</button>
-                                    <button className="text-red-600 hover:underline text-xs" onClick={() => { if (confirm('Delete cycle? Entries assigned to it become orphans.')) onDelete(c.id); }}>delete</button>
+                                    {confirmDel === c.id ? (
+                                        <button className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-semibold" onClick={() => { onDelete(c.id); setConfirmDel(null); }}>Confirm delete</button>
+                                    ) : (
+                                        <button className="text-red-600 hover:underline text-xs" onClick={() => setConfirmDel(c.id)}>delete</button>
+                                    )}
                                 </td>
                             </tr>
                         ))}
@@ -1261,16 +2514,41 @@ function SettingsView({ state, onReplaceState, user, onSignOut }) {
         URL.revokeObjectURL(a.href);
     }
 
+    // Inline preview state — replaces native confirm() popups
+    const [xlsxPreview, setXlsxPreview] = useState(null); // {entries, unparsed, cycles, fileName}
+    const [jsonPreview, setJsonPreview] = useState(null); // {parsed, fileName}
+    const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+    const [confirmSeed, setConfirmSeed] = useState(false);
+
+    function loadHistoricalSeed() {
+        const today = new Date().toISOString().slice(0, 10);
+        const activeCycleId = (SEED_DATA.cycles.find(c => today >= c.startDate && today <= c.endDate) || SEED_DATA.cycles[SEED_DATA.cycles.length - 1])?.id;
+        onReplaceState({
+            schemaVersion: 1,
+            cycles: SEED_DATA.cycles.map(c => ({ ...c })),
+            entries: SEED_DATA.entries.map(e => ({ ...e })),
+            settings: { ...(state.settings || {}), activeCycleId, _seededAt: new Date().toISOString() }
+        });
+        setConfirmSeed(false);
+        setMsg(`Loaded ${SEED_DATA.entries.length} historical entries across ${SEED_DATA.cycles.length} cycles.`);
+    }
+
     async function importJson(e) {
         const file = e.target.files?.[0];
         if (!file) return;
         try {
             const parsed = JSON.parse(await file.text());
             if (!Array.isArray(parsed.cycles) || !Array.isArray(parsed.entries)) throw new Error('JSON missing cycles or entries');
-            if (!confirm('Replace current data with imported file?')) return;
-            onReplaceState(parsed);
-            setMsg('Imported.');
+            setJsonPreview({ parsed, fileName: file.name });
+            setMsg('');
         } catch (err) { setMsg('Error: ' + err.message); }
+        e.target.value = ''; // allow re-pick of same file
+    }
+    function applyJsonImport() {
+        if (!jsonPreview) return;
+        onReplaceState(jsonPreview.parsed);
+        setJsonPreview(null);
+        setMsg(`Imported ${jsonPreview.parsed.entries.length} entries from ${jsonPreview.fileName}.`);
     }
 
     async function importXlsx(e) {
@@ -1290,29 +2568,28 @@ function SettingsView({ state, onReplaceState, user, onSignOut }) {
             }
 
             const { entries: newEntries, unparsed } = parseXlsxToEntries(wb, cycles);
-
-            const summary = `Parsed ${newEntries.length} entries across ${[...new Set(newEntries.map(e => e.cycleId))].length} cycles. ${unparsed.length} rows skipped.`;
-            console.log('Import summary:', summary);
-            console.log('Imported entries:', newEntries);
-            console.log('Skipped rows:', unparsed);
-
-            if (!confirm(`${summary}\n\nReplace current cycles + entries with imported data?`)) return;
-
-            // Find the current cycle (today's date)
-            const today = new Date().toISOString().slice(0, 10);
-            const activeCycleId = (cycles.find(c => today >= c.startDate && today <= c.endDate) || cycles[cycles.length - 1])?.id;
-
-            onReplaceState({
-                ...state,
-                cycles,
-                entries: newEntries,
-                settings: { ...(state.settings || {}), activeCycleId, _xlsxImportedAt: new Date().toISOString(), _xlsxUnparsed: unparsed }
-            });
-            setMsg(`${summary} ${unparsed.length ? '(See console for skipped rows.)' : ''}`);
+            setXlsxPreview({ entries: newEntries, unparsed, cycles, fileName: file.name });
+            setMsg('');
         } catch (err) {
             console.error(err);
             setMsg('Error: ' + err.message);
         }
+        e.target.value = '';
+    }
+
+    function applyXlsxImport() {
+        if (!xlsxPreview) return;
+        const { entries, cycles, unparsed } = xlsxPreview;
+        const today = new Date().toISOString().slice(0, 10);
+        const activeCycleId = (cycles.find(c => today >= c.startDate && today <= c.endDate) || cycles[cycles.length - 1])?.id;
+        onReplaceState({
+            ...state,
+            cycles,
+            entries,
+            settings: { ...(state.settings || {}), activeCycleId, _xlsxImportedAt: new Date().toISOString(), _xlsxUnparsed: unparsed }
+        });
+        setXlsxPreview(null);
+        setMsg(`Imported ${entries.length} entries across ${cycles.length} cycles${unparsed.length ? ` (${unparsed.length} rows skipped — see review pane below if needed)` : ''}.`);
     }
 
     const [drivePickBusy, setDrivePickBusy] = useState(false);
@@ -1326,11 +2603,11 @@ function SettingsView({ state, onReplaceState, user, onSignOut }) {
         } catch (e) { setDriveErr(e.message); }
         finally { setDrivePickBusy(false); }
     }
-    function disconnectDrive() {
-        if (!confirm('Disconnect Drive? Existing folder links on entries are kept.')) return;
+    function reallyDisconnectDrive() {
         setDriveParentFolder(null);
         localStorage.removeItem(DRIVE_TOKEN_KEY);
         setDriveParent(null);
+        setConfirmDisconnect(false);
     }
 
     return (
@@ -1354,17 +2631,116 @@ function SettingsView({ state, onReplaceState, user, onSignOut }) {
                     <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50" onClick={() => fileRef.current?.click()}>Import JSON</button>
                     <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={importJson} />
                 </div>
+                {jsonPreview && (
+                    <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm space-y-2">
+                        <div><strong>Preview:</strong> {jsonPreview.fileName} contains {jsonPreview.parsed.cycles.length} cycles, {jsonPreview.parsed.entries.length} entries.</div>
+                        <div className="text-xs text-amber-800">Applying will <strong>replace</strong> all current data.</div>
+                        <div className="flex gap-2">
+                            <button className="px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold" onClick={applyJsonImport}>Replace all data</button>
+                            <button className="px-3 py-1.5 rounded border text-sm hover:bg-white" onClick={() => setJsonPreview(null)}>Cancel</button>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <div className="bg-white rounded-lg border p-4 space-y-3">
+                <h3 className="font-semibold">Load historical CLE data</h3>
+                <p className="text-sm text-slate-600">
+                    Pre-built from your spreadsheet: <strong>{SEED_DATA.entries.length} entries</strong> across <strong>{SEED_DATA.cycles.length} cycles</strong> (2016 first-admit period through 2024–2026). One click, no upload needed.
+                </p>
+                {!confirmSeed ? (
+                    <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50 bg-indigo-50 border-indigo-200 text-indigo-800 font-medium" onClick={() => setConfirmSeed(true)}>
+                        Load my historical CLE data
+                    </button>
+                ) : (
+                    <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm space-y-2">
+                        <div>This will <strong>replace</strong> your current cycles and entries with the {SEED_DATA.entries.length}-entry baseline. Existing data is overwritten.</div>
+                        <div className="flex gap-2">
+                            <button className="px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold" onClick={loadHistoricalSeed}>Yes, load it</button>
+                            <button className="px-3 py-1.5 rounded border text-sm hover:bg-white" onClick={() => setConfirmSeed(false)}>Cancel</button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="bg-white rounded-lg border p-4 space-y-3">
                 <h3 className="font-semibold">Import from your CLE spreadsheet (.xlsx)</h3>
                 <p className="text-sm text-slate-600">
-                    Pick the .xlsx exported from Google Sheets. The app will auto-create your historical cycles (2016 → 2026) and parse each row in the entries section into per-category credits. Anything it can't parse goes to the console with the row number.
+                    Pick the .xlsx exported from Google Sheets. The app will auto-create your historical cycles (2016 → 2026) and parse each row in the entries section into per-category credits. Anything it can't parse is shown below for review.
                 </p>
                 <div className="flex gap-2 items-center">
                     <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50" onClick={() => xlsxRef.current?.click()}>Pick .xlsx</button>
                     <input ref={xlsxRef} type="file" accept=".xlsx,.xls,.xlsm,.csv" className="hidden" onChange={importXlsx} />
                 </div>
+
+                {xlsxPreview && (
+                    <div className="bg-indigo-50 border border-indigo-200 rounded p-4 space-y-3">
+                        <div className="flex items-baseline justify-between flex-wrap gap-2">
+                            <div className="font-semibold text-slate-900">Preview: {xlsxPreview.fileName}</div>
+                            <div className="text-sm text-slate-700">
+                                <strong>{xlsxPreview.entries.length}</strong> entries · <strong>{xlsxPreview.cycles.length}</strong> cycles{xlsxPreview.unparsed.length > 0 && <> · <span className="text-amber-700"><strong>{xlsxPreview.unparsed.length}</strong> rows skipped</span></>}
+                            </div>
+                        </div>
+
+                        {xlsxPreview.entries.length > 0 && (
+                            <details open>
+                                <summary className="cursor-pointer text-sm font-medium text-slate-700">Per-cycle breakdown</summary>
+                                <table className="w-full text-xs mt-2 bg-white rounded border">
+                                    <thead className="bg-slate-50">
+                                        <tr><th className="text-left p-2">Cycle</th><th className="text-right p-2">Entries</th><th className="text-right p-2">Total credits</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        {xlsxPreview.cycles.map(c => {
+                                            const cEntries = xlsxPreview.entries.filter(e => e.cycleId === c.id);
+                                            const tot = cEntries.reduce((a, e) => a + entryTotalCredits(e), 0);
+                                            return (
+                                                <tr key={c.id} className="border-t">
+                                                    <td className="p-2">{c.label || `${c.startDate} → ${c.endDate}`}</td>
+                                                    <td className="p-2 text-right num">{cEntries.length}</td>
+                                                    <td className="p-2 text-right num">{fmt(tot)}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </details>
+                        )}
+
+                        {xlsxPreview.entries.length > 0 && (
+                            <details>
+                                <summary className="cursor-pointer text-sm font-medium text-slate-700">First 5 imported entries</summary>
+                                <ul className="mt-2 text-xs space-y-1">
+                                    {xlsxPreview.entries.slice(0, 5).map(e => (
+                                        <li key={e.id} className="flex gap-2"><span className="num text-slate-500">{e.date}</span> <span className="flex-1">{e.name}</span> <span className="num font-semibold">{fmt(entryTotalCredits(e))}</span></li>
+                                    ))}
+                                </ul>
+                            </details>
+                        )}
+
+                        {xlsxPreview.unparsed.length > 0 && (
+                            <details>
+                                <summary className="cursor-pointer text-sm font-medium text-amber-800">{xlsxPreview.unparsed.length} skipped rows (review)</summary>
+                                <ul className="mt-2 text-xs space-y-1 max-h-64 overflow-y-auto">
+                                    {xlsxPreview.unparsed.map((u, i) => (
+                                        <li key={i} className="bg-white rounded p-1.5 border">
+                                            <span className="text-slate-500">Row {u.rowNumber}:</span> <strong>{u.course}</strong>
+                                            {u.creditType && <> — credit text "<em>{u.creditType}</em>"</>}
+                                            <span className="text-amber-800"> [{u.reason}]</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </details>
+                        )}
+
+                        <div className="text-xs text-slate-700 bg-amber-50 border border-amber-200 rounded p-2">
+                            ⚠ Applying will <strong>replace</strong> all current cycles and entries with the imported data.
+                        </div>
+                        <div className="flex gap-2">
+                            <button className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold" onClick={applyXlsxImport}>Apply import</button>
+                            <button className="px-3 py-1.5 rounded border text-sm hover:bg-white" onClick={() => setXlsxPreview(null)}>Cancel</button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="bg-white rounded-lg border p-4 space-y-3">
@@ -1380,10 +2756,20 @@ function SettingsView({ state, onReplaceState, user, onSignOut }) {
                             CLE Tracker root: <a className="text-indigo-700 hover:underline" href={`https://drive.google.com/drive/folders/${driveParent.id}`} target="_blank" rel="noreferrer">{driveParent.name}</a>
                         </p>
                         <p className="text-xs text-slate-500">When you drag files onto an entry, the app creates a subfolder named "<em>{`{date}`} {`{course name}`}</em>" inside this folder and uploads to it.</p>
-                        <div className="flex gap-2">
-                            <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50" onClick={connectDrive} disabled={drivePickBusy}>Change folder…</button>
-                            <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50 text-red-600" onClick={disconnectDrive}>Disconnect</button>
-                        </div>
+                        {!confirmDisconnect ? (
+                            <div className="flex gap-2">
+                                <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50" onClick={connectDrive} disabled={drivePickBusy}>Change folder…</button>
+                                <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50 text-red-600" onClick={() => setConfirmDisconnect(true)}>Disconnect</button>
+                            </div>
+                        ) : (
+                            <div className="bg-red-50 border border-red-200 rounded p-3 text-sm space-y-2">
+                                <div>Disconnect Drive? Existing folder links on entries are kept; you'll just need to reconnect to upload more.</div>
+                                <div className="flex gap-2">
+                                    <button className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-700 text-white text-sm font-semibold" onClick={reallyDisconnectDrive}>Yes, disconnect</button>
+                                    <button className="px-3 py-1.5 rounded border text-sm hover:bg-white" onClick={() => setConfirmDisconnect(false)}>Cancel</button>
+                                </div>
+                            </div>
+                        )}
                     </>
                 ) : (
                     <>
@@ -1518,6 +2904,7 @@ function App({ user, db, onSignOut }) {
                         entries={state.entries}
                         onEditCarryIn={() => setCarryInOpen(true)}
                         onPlanCarryOut={() => setCarryOutOpen(true)}
+                        onEditEntry={(e) => setEditingEntry(e)}
                     />
                 )}
                 {tab === 'entries' && (
