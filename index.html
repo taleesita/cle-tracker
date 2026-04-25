@@ -67,9 +67,10 @@ const GOOGLE_OAUTH_CLIENT_ID = '411328427627-sfpldsu3flmbpd77p1dns5btrpo6b6sp.ap
 // API key for Picker — same string as Firebase apiKey (they're literally the same key in GCP).
 const GOOGLE_API_KEY = 'AIzaSyAseNwLvaN-3Rl6qjJR13zW08VtlmrEU-c';
 const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
-const DRIVE_TOKEN_KEY  = 'cle_drive_token';
+const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.6';
+const APP_VERSION = 'v0.8';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -242,8 +243,7 @@ const KNOWN_CYCLES = [
 ];
 
 // ============================================================
-// SEED DATA — Taly's historical CLE entries + carry-in, parsed from the spreadsheet.
-// Loaded by the "Load my historical CLE data" button in Settings.
+// SEED DATA — Taly's historical CLE entries + carry-in.
 // ============================================================
 const SEED_DATA = {
   "cycles": [
@@ -619,7 +619,7 @@ const SEED_DATA = {
       "date": "2024-01-26",
       "location": "Fordham - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "ethics",
@@ -636,7 +636,7 @@ const SEED_DATA = {
       "date": "2024-02-09",
       "location": "Fordham - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "law_practice_management",
@@ -653,7 +653,7 @@ const SEED_DATA = {
       "date": "2024-03-11",
       "location": "Fordham - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "diversity",
@@ -670,7 +670,7 @@ const SEED_DATA = {
       "date": "2024-03-19",
       "location": "Fordham - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "cybersecurity_general",
@@ -687,7 +687,7 @@ const SEED_DATA = {
       "date": "2024-03-28",
       "location": "Columbia - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "cybersecurity_general",
@@ -708,7 +708,7 @@ const SEED_DATA = {
       "date": "2024-04-02",
       "location": "Fordham - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "diversity",
@@ -725,7 +725,7 @@ const SEED_DATA = {
       "date": "2024-04-08",
       "location": "Fordham - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "diversity",
@@ -742,7 +742,7 @@ const SEED_DATA = {
       "date": "2023-09-20",
       "location": "NYU - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -759,7 +759,7 @@ const SEED_DATA = {
       "date": "2023-09-27",
       "location": "Fordham - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "diversity",
@@ -776,7 +776,7 @@ const SEED_DATA = {
       "date": "2023-10-05",
       "location": "Fordham - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -793,7 +793,7 @@ const SEED_DATA = {
       "date": "2023-10-12",
       "location": "Fordham - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "diversity",
@@ -810,7 +810,7 @@ const SEED_DATA = {
       "date": "2023-10-18",
       "location": "Fordham - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "diversity",
@@ -827,7 +827,7 @@ const SEED_DATA = {
       "date": "2023-10-18",
       "location": "Fordham - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -844,7 +844,7 @@ const SEED_DATA = {
       "date": "2023-10-25",
       "location": "Fordham - virtual",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -865,7 +865,7 @@ const SEED_DATA = {
       "date": "2021-08-21",
       "location": "In-House Focus",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -882,7 +882,7 @@ const SEED_DATA = {
       "date": "2021-10-19",
       "location": "NYU School of Law",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -899,7 +899,7 @@ const SEED_DATA = {
       "date": "2021-11-03",
       "location": "NYU School of Law",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -916,7 +916,7 @@ const SEED_DATA = {
       "date": "2021-11-04",
       "location": "Columbia Law School",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "diversity",
@@ -941,7 +941,7 @@ const SEED_DATA = {
       "date": "2021-11-10",
       "location": "NYU School of Law",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -958,7 +958,7 @@ const SEED_DATA = {
       "date": "2021-11-30",
       "location": "Fordham",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "diversity",
@@ -975,7 +975,7 @@ const SEED_DATA = {
       "date": "2021-12-02",
       "location": "Columbia Law School",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -996,7 +996,7 @@ const SEED_DATA = {
       "date": "2021-12-15",
       "location": "In-House Focus",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "law_practice_management",
@@ -1013,7 +1013,7 @@ const SEED_DATA = {
       "date": "2022-01-19",
       "location": "Fordham",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "diversity",
@@ -1030,7 +1030,7 @@ const SEED_DATA = {
       "date": "2022-02-10",
       "location": "Columbia",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1051,7 +1051,7 @@ const SEED_DATA = {
       "date": "2022-02-11",
       "location": "Fordham",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1068,7 +1068,7 @@ const SEED_DATA = {
       "date": "2022-02-25",
       "location": "Fordham",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1085,7 +1085,7 @@ const SEED_DATA = {
       "date": "2022-03-01",
       "location": "Fordham",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "ethics",
@@ -1102,7 +1102,7 @@ const SEED_DATA = {
       "date": "2020-05-10",
       "location": "In-House Focus",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "ethics",
@@ -1119,7 +1119,7 @@ const SEED_DATA = {
       "date": "2020-05-17",
       "location": "In-House Focus",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "ethics",
@@ -1136,7 +1136,7 @@ const SEED_DATA = {
       "date": "2020-05-17",
       "location": "In-House Focus",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "diversity",
@@ -1153,7 +1153,7 @@ const SEED_DATA = {
       "date": "2020-05-17",
       "location": "In-House Focus",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1170,7 +1170,7 @@ const SEED_DATA = {
       "date": "2020-05-17",
       "location": "In-House Focus",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1187,7 +1187,7 @@ const SEED_DATA = {
       "date": "2020-05-17",
       "location": "In-House Focus",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1204,7 +1204,7 @@ const SEED_DATA = {
       "date": "2020-05-24",
       "location": "In-House Focus",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1221,7 +1221,7 @@ const SEED_DATA = {
       "date": "2020-05-24",
       "location": "In-House Focus",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1238,7 +1238,7 @@ const SEED_DATA = {
       "date": "2020-05-24",
       "location": "In-House Focus",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1255,7 +1255,7 @@ const SEED_DATA = {
       "date": "2020-05-24",
       "location": "In-House Focus",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1272,7 +1272,7 @@ const SEED_DATA = {
       "date": "2020-05-31",
       "location": "PLI",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "ethics",
@@ -1289,7 +1289,7 @@ const SEED_DATA = {
       "date": "2020-06-07",
       "location": "In-House Focus",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1306,7 +1306,7 @@ const SEED_DATA = {
       "date": "2019-05-01",
       "location": "Netflix",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1323,7 +1323,7 @@ const SEED_DATA = {
       "date": "2019-05-22",
       "location": "Netflix",
       "jurisdiction": "CA",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1340,7 +1340,7 @@ const SEED_DATA = {
       "date": "2019-05-22",
       "location": "Netflix",
       "jurisdiction": "CA",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1357,7 +1357,7 @@ const SEED_DATA = {
       "date": "2019-05-22",
       "location": "Netflix",
       "jurisdiction": "CA",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1374,7 +1374,7 @@ const SEED_DATA = {
       "date": "2017-03-22",
       "location": "Fordham Law",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
@@ -1395,7 +1395,7 @@ const SEED_DATA = {
       "date": "2017-03-30",
       "location": "Fordham Law",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "ethics",
@@ -1412,7 +1412,7 @@ const SEED_DATA = {
       "date": "2017-08-10",
       "location": "Her Justice",
       "jurisdiction": "NY",
-      "status": "cert_received",
+      "status": "counted",
       "credits": [
         {
           "categoryId": "skills",
@@ -1581,7 +1581,7 @@ function getDriveAccessToken({ prompt = '' } = {}) {
         if (!_driveTokenClient) {
             _driveTokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: GOOGLE_OAUTH_CLIENT_ID,
-                scope: 'https://www.googleapis.com/auth/drive.file',
+                scope: DRIVE_SCOPE,
                 callback: () => {} // assigned per-call
             });
         }
