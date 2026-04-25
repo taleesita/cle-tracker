@@ -70,7 +70,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.9';
+const APP_VERSION = 'v0.11';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -2833,20 +2833,34 @@ function CarryOutPlanner({ cycle, entries, cycles, onApply, onClose }) {
     const summary = useMemo(() => cycleSummary(cycle, entries), [cycle, entries]);
     const suggestion = useMemo(() => suggestCarryOut(cycle, entries), [cycle, entries]);
     const [allocation, setAllocation] = useState(suggestion.allocation);
-    const [targetCycleId, setTargetCycleId] = useState(() => {
-        const next = cycles.find(c => c.id !== cycle.id && c.startDate >= cycle.endDate);
-        return next?.id || '';
-    });
+
+    // Auto-pick the chronologically next cycle (earliest startDate >= this cycle's endDate).
+    const candidateNextCycles = useMemo(() => cycles
+        .filter(c => c.id !== cycle.id && c.startDate >= cycle.endDate)
+        .sort((a, b) => a.startDate.localeCompare(b.startDate)),
+        [cycles, cycle.id, cycle.endDate]);
+    const [targetCycleId, setTargetCycleId] = useState(() => candidateNextCycles[0]?.id || '');
+    const targetCycle = cycles.find(c => c.id === targetCycleId);
+
     const cycleCats = getCategoriesForCycle(cycle);
     const errs = validateCarryOut(cycle, entries, allocation);
     const total = Object.values(allocation).reduce((a, b) => a + Number(b || 0), 0);
+
+    // Per-category caps from NYSBA: only the mandatory categories have explicit per-category caps.
+    // Other categories are bounded only by the 6-credit total. We display 6 for those, with a note.
+    function displayedCap(cat) {
+        // Mandatory categories have explicit caps; for non-mandatory, the only cap is the total.
+        return cat.required > 0 ? cat.carryCap : CARRYOVER_TOTAL_MAX;
+    }
 
     return (
         <div className="p-6 space-y-3">
             <h2 className="text-xl font-bold">Plan carry-over to next cycle</h2>
             <p className="text-sm text-slate-600">
-                Earned: <strong>{summary.totalApplied}</strong> / {summary.totalRequired} required.
-                Surplus: <strong>{summary.totalSurplus}</strong>. NY allows up to {CARRYOVER_TOTAL_MAX} credits forward.
+                Earned <strong>{fmt(summary.totalApplied)}</strong> / {fmt(summary.totalRequired)} required ·
+                surplus <strong>{fmt(summary.totalSurplus)}</strong>.
+                NY allows up to {CARRYOVER_TOTAL_MAX} credits forward
+                {targetCycle && <> to <strong>{targetCycle.label || `${targetCycle.startDate} → ${targetCycle.endDate}`}</strong></>}.
             </p>
             <table className="w-full text-sm border rounded">
                 <thead className="bg-slate-50">
@@ -2863,8 +2877,8 @@ function CarryOutPlanner({ cycle, entries, cycles, onApply, onClose }) {
                         return (
                             <tr key={cat.id} className="border-t">
                                 <td className="p-2">{cat.label}</td>
-                                <td className="p-2 text-right num">{surplus}</td>
-                                <td className="p-2 text-right num text-slate-500">{cat.carryCap}</td>
+                                <td className="p-2 text-right num">{fmt(surplus)}</td>
+                                <td className="p-2 text-right num text-slate-500">{displayedCap(cat)}</td>
                                 <td className="p-2 text-right">
                                     <input type="number" step="0.5" min="0" className="border rounded p-1 w-20 text-right num"
                                         value={allocation[cat.id] || 0}
@@ -2877,18 +2891,28 @@ function CarryOutPlanner({ cycle, entries, cycles, onApply, onClose }) {
                 <tfoot>
                     <tr className="border-t bg-slate-50 font-semibold">
                         <td colSpan={3} className="p-2 text-right">Total</td>
-                        <td className={`p-2 text-right num ${total > CARRYOVER_TOTAL_MAX ? 'text-amber-700' : ''}`}>{total} / {CARRYOVER_TOTAL_MAX}</td>
+                        <td className={`p-2 text-right num ${total > CARRYOVER_TOTAL_MAX ? 'text-amber-700' : ''}`}>{fmt(total)} / {CARRYOVER_TOTAL_MAX}</td>
                     </tr>
                 </tfoot>
             </table>
+            <p className="text-xs text-slate-500">
+                Per NY rules, ethics carries up to 4, D&amp;I up to 1, cybersecurity-general up to 1.
+                Other categories are only bounded by the 6-credit total. The total above is what counts.
+            </p>
 
-            <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-600">Apply to cycle:</span>
-                <select className="border rounded p-1.5 bg-white text-sm" value={targetCycleId} onChange={(e) => setTargetCycleId(e.target.value)}>
-                    <option value="">— select target cycle —</option>
-                    {cycles.filter(c => c.id !== cycle.id).map(c => <option key={c.id} value={c.id}>{c.label || c.startDate}</option>)}
-                </select>
-            </div>
+            {/* Only show the cycle picker if there's ambiguity (more than one candidate "next" cycle). */}
+            {candidateNextCycles.length > 1 && (
+                <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-600">Apply to cycle:</span>
+                    <select className="border rounded p-1.5 bg-white text-sm" value={targetCycleId} onChange={(e) => setTargetCycleId(e.target.value)}>
+                        {candidateNextCycles.map(c => <option key={c.id} value={c.id}>{c.label || c.startDate}</option>)}
+                    </select>
+                </div>
+            )}
+
+            {candidateNextCycles.length === 0 && (
+                <p className="text-xs text-amber-700">No future cycle to carry into. Add a new cycle in <strong>Cycles</strong> first.</p>
+            )}
 
             {errs.length > 0 && <ul className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800 list-disc list-inside">{errs.map((e, i) => <li key={i}>{e}</li>)}</ul>}
 
@@ -3013,14 +3037,36 @@ function SettingsView({ state, onReplaceState, user, onSignOut }) {
     function loadHistoricalSeed() {
         const today = new Date().toISOString().slice(0, 10);
         const activeCycleId = (SEED_DATA.cycles.find(c => today >= c.startDate && today <= c.endDate) || SEED_DATA.cycles[SEED_DATA.cycles.length - 1])?.id;
+
+        // Preserve user-added fields (driveUrl, custom notes, status changes) on entries that
+        // already exist by ID. Stable seed IDs (seed-entry-N) make this safe across reseeds.
+        const existingById = new Map((state.entries || []).map(e => [e.id, e]));
+        let preservedDriveLinks = 0;
+        const mergedEntries = SEED_DATA.entries.map(seedEntry => {
+            const existing = existingById.get(seedEntry.id);
+            if (!existing) return { ...seedEntry };
+            const merged = { ...seedEntry };
+            if (existing.driveUrl) { merged.driveUrl = existing.driveUrl; preservedDriveLinks++; }
+            // Preserve user note appended after the auto-generated one (rough heuristic: longer = edited)
+            if (existing.notes && existing.notes !== seedEntry.notes && existing.notes.length > (seedEntry.notes || '').length) {
+                merged.notes = existing.notes;
+            }
+            // Preserve a status change if user moved it OFF 'counted' (e.g., back to attended for re-review)
+            if (existing.status && existing.status !== 'counted' && seedEntry.status === 'counted') {
+                merged.status = existing.status;
+            }
+            return merged;
+        });
+
+        // Preserve Drive parent folder + token (those live in localStorage, not state, so unaffected).
         onReplaceState({
             schemaVersion: 1,
             cycles: SEED_DATA.cycles.map(c => ({ ...c })),
-            entries: SEED_DATA.entries.map(e => ({ ...e })),
+            entries: mergedEntries,
             settings: { ...(state.settings || {}), activeCycleId, _seededAt: new Date().toISOString() }
         });
         setConfirmSeed(false);
-        setMsg(`Loaded ${SEED_DATA.entries.length} historical entries across ${SEED_DATA.cycles.length} cycles.`);
+        setMsg(`Loaded ${SEED_DATA.entries.length} entries across ${SEED_DATA.cycles.length} cycles${preservedDriveLinks > 0 ? ` · preserved ${preservedDriveLinks} Drive link${preservedDriveLinks === 1 ? '' : 's'}` : ''}.`);
     }
 
     async function importJson(e) {
