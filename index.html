@@ -70,7 +70,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.11';
+const APP_VERSION = 'v0.12';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -2829,7 +2829,7 @@ function CarryInEditor({ cycle, onSave, onClose }) {
     );
 }
 
-function CarryOutPlanner({ cycle, entries, cycles, onApply, onClose }) {
+function CarryOutPlanner({ cycle, entries, cycles, onApply, onClose, onAddCycle }) {
     const summary = useMemo(() => cycleSummary(cycle, entries), [cycle, entries]);
     const suggestion = useMemo(() => suggestCarryOut(cycle, entries), [cycle, entries]);
     const [allocation, setAllocation] = useState(suggestion.allocation);
@@ -2910,9 +2910,41 @@ function CarryOutPlanner({ cycle, entries, cycles, onApply, onClose }) {
                 </div>
             )}
 
-            {candidateNextCycles.length === 0 && (
-                <p className="text-xs text-amber-700">No future cycle to carry into. Add a new cycle in <strong>Cycles</strong> first.</p>
-            )}
+            {candidateNextCycles.length === 0 && (() => {
+                // Propose: start = this cycle's end date, end = start + 2 years.
+                const start = cycle.endDate;
+                const [y, m, d] = start.split('-').map(Number);
+                const end = `${y + 2}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                const startYear = y;
+                const endYear = y + 2;
+                const proposedLabel = `${startYear}-${endYear} Cycle`;
+                function createAndUse() {
+                    const newCycle = {
+                        id: uid(),
+                        label: proposedLabel,
+                        startDate: start,
+                        endDate: end,
+                        totalRequired: TOTAL_CREDITS_REQUIRED,
+                        carryIn: {},
+                        carryInApplied: {},
+                        // Use the same categories as this cycle so the new one's dashboard matches.
+                        categories: getCategoriesForCycle(cycle).map(c => ({ ...c }))
+                    };
+                    onAddCycle?.(newCycle);
+                    setTargetCycleId(newCycle.id);
+                }
+                return (
+                    <div className="bg-indigo-50 border border-indigo-200 rounded p-3 space-y-2">
+                        <div className="text-sm">
+                            No future cycle exists yet. Want to create the <strong>{proposedLabel}</strong> ({start} → {end}) and apply this carry-over to it?
+                        </div>
+                        <button className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold"
+                            onClick={createAndUse}>
+                            Create {proposedLabel}
+                        </button>
+                    </div>
+                );
+            })()}
 
             {errs.length > 0 && <ul className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800 list-disc list-inside">{errs.map((e, i) => <li key={i}>{e}</li>)}</ul>}
 
@@ -3626,7 +3658,7 @@ function App({ user, db, onSignOut }) {
                 {(() => {
                     const c = state.cycles.find(x => x.id === carryOutCycleId);
                     return c && <CarryOutPlanner cycle={c} cycles={state.cycles} entries={state.entries}
-                        onApply={applyCarryOut} onClose={() => setCarryOutCycleId(null)} />;
+                        onApply={applyCarryOut} onClose={() => setCarryOutCycleId(null)} onAddCycle={addCycle} />;
                 })()}
             </Modal>
         </div>
