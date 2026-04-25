@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>CLE Tracker</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="CLE">
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        body { background: #f7f8fa; color: #111827; }
+        .num { font-variant-numeric: tabular-nums; }
+        .tag-required { background:#fef3c7; color:#92400e; }
+        .tag-optional { background:#e0f2fe; color:#075985; }
+        .row-warn { background: #fffbeb; }
+        @keyframes shrink { from { width: 100%; } to { width: 0%; } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        // White-screen fallback if Babel fails to compile
+        window.onerror = function(msg, url, line, col, error) {
+            var root = document.getElementById('root');
+            if (root && !root.innerHTML.trim()) {
+                root.innerHTML = '<div style="padding:32px;font-family:system-ui;max-width:600px;margin:0 auto;">' +
+                    '<h2 style="color:#dc2626;">Something went wrong</h2>' +
+                    '<pre style="background:#fef2f2;padding:16px;border-radius:8px;overflow:auto;font-size:13px;color:#991b1b;">' +
+                    msg + (line ? '\nLine: ' + line : '') + (col ? ', Col: ' + col : '') +
+                    (error && error.stack ? '\n\n' + error.stack : '') + '</pre></div>';
+            }
+        };
+    </script>
+
+    <script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+// ============================================================
+// FIREBASE CONFIG — replace with your own project's config.
+// You can also paste your Firebase config into the on-screen
+// setup form on first load; the app will save it to localStorage.
+// ============================================================
+const DEFAULT_FB_CONFIG = {
+    apiKey: "AIzaSyAseNwLvaN-3Rl6qjJR13zW08VtlmrEU-c",
+    authDomain: "talys-cle-tracker.firebaseapp.com",
+    projectId: "talys-cle-tracker",
+    storageBucket: "talys-cle-tracker.firebasestorage.app",
+    messagingSenderId: "411328427627",
+    appId: "1:411328427627:web:d0f7c6a12787d1e061632e"
+};
+const FB_CONFIG_KEY = 'cle_fb_config';
+const ALLOWED_EMAILS = ['taly.matiteyahu@gmail.com'];
+
+// Google Cloud OAuth client ID — Firebase's auto-created Web client.
+const GOOGLE_OAUTH_CLIENT_ID = '411328427627-sfpldsu3flmbpd77p1dns5btrpo6b6sp.apps.googleusercontent.com';
+// API key for Picker — same string as Firebase apiKey (they're literally the same key in GCP).
+const GOOGLE_API_KEY = 'AIzaSyAseNwLvaN-3Rl6qjJR13zW08VtlmrEU-c';
+const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
+const DRIVE_TOKEN_KEY  = 'cle_drive_token';
+
+const APP_VERSION = 'v0.3';
+
+// ============================================================
+// NY CLE RULES (experienced attorneys, per NYSBA)
+// Edit these to reflect your interpretation of the rules.
+// All math reads from these constants directly.
+// ============================================================
+const TOTAL_CREDITS_REQUIRED = 24;
+const CARRYOVER_TOTAL_MAX = 6;
+
+const CATEGORIES = [
+    { id: 'ethics',                          label: 'Ethics & Professionalism',                                 required: 4, carryCap: 4 },
+    { id: 'diversity',                       label: 'Diversity, Inclusion & Elimination of Bias',                required: 1, carryCap: 1 },
+    { id: 'cybersecurity_general',           label: 'Cybersecurity, Privacy & Data Protection — General',        required: 1, carryCap: 1 },
+    { id: 'cybersecurity_ethics',            label: 'Cybersecurity, Privacy & Data Protection — Ethics',         required: 0, carryCap: 4, note: 'Counts toward Ethics requirement.' },
+    { id: 'skills',                          label: 'Skills',                                                    required: 0, carryCap: 6 },
+    { id: 'law_practice_management',         label: 'Law Practice Management',                                   required: 0, carryCap: 6 },
+    { id: 'areas_of_professional_practice',  label: 'Areas of Professional Practice',                            required: 0, carryCap: 6 }
+];
+const CATEGORY_BY_ID = Object.fromEntries(CATEGORIES.map(c => [c.id, c]));
+
+const ENTRY_STATUSES = [
+    { id: 'attended',      label: 'Attended (no cert yet)' },
+    { id: 'cert_received', label: 'Cert received' },
+    { id: 'counted',       label: 'Counted toward cycle' }
+];
+
+// ============================================================
+// CALCULATIONS — pure functions, the heart of what your sheet
+// formulas were doing.
+// ============================================================
+function entryCreditsByCategory(entry) {
+    const out = {};
+    for (const split of entry.credits || []) {
+        if (!split.categoryId) continue;
+        out[split.categoryId] = (out[split.categoryId] || 0) + Number(split.credits || 0);
+    }
+    return out;
+}
+function entryTotalCredits(entry) {
+    return (entry.credits || []).reduce((a, c) => a + Number(c.credits || 0), 0);
+}
+
+function earnedByCategory(entries, cycleId, { includeUncounted = false } = {}) {
+    const totals = {};
+    for (const e of entries) {
+        if (e.cycleId !== cycleId) continue;
+        if (!includeUncounted && e.status !== 'counted') continue;
+        for (const [cat, val] of Object.entries(entryCreditsByCategory(e))) {
+            totals[cat] = (totals[cat] || 0) + val;
+        }
+    }
+    return totals;
+}
+
+function categoryStatus(cycle, entries) {
+    const earned = earnedByCategory(entries, cycle.id);
+    const out = {};
+    for (const cat of CATEGORIES) {
+        const required = cat.required;
+        const carryIn = Number(cycle.carryIn?.[cat.id] || 0);
+        const carryInApplied = Number(cycle.carryInApplied?.[cat.id] || 0);
+        const e = Number(earned[cat.id] || 0);
+        const applied = carryInApplied + e;
+        const available = carryIn + e;
+        const stillNeeded = Math.max(0, required - applied);
+        out[cat.id] = { categoryId: cat.id, required, carryIn, carryInApplied, earned: e, applied, available, stillNeeded };
+    }
+    return out;
+}
+
+function cycleSummary(cycle, entries) {
+    const cats = categoryStatus(cycle, entries);
+    const totalRequired = cycle.totalRequired || TOTAL_CREDITS_REQUIRED;
+    const totalEarnedThisCycle = Object.values(cats).reduce((a, c) => a + c.earned, 0);
+    const totalCarryInApplied = Object.values(cats).reduce((a, c) => a + c.carryInApplied, 0);
+    const totalApplied = totalEarnedThisCycle + totalCarryInApplied;
+    const totalStillNeeded = Math.max(0, totalRequired - totalApplied);
+    const totalSurplus = Math.max(0, totalApplied - totalRequired);
+    const totalCarryOutMax = Math.min(totalSurplus, CARRYOVER_TOTAL_MAX);
+    return { totalRequired, totalEarnedThisCycle, totalCarryInApplied, totalApplied, totalStillNeeded, totalSurplus, totalCarryOutMax, categoryStatus: cats };
+}
+
+function suggestCarryOut(cycle, entries) {
+    const summary = cycleSummary(cycle, entries);
+    const perCategorySurplus = {};
+    for (const [id, s] of Object.entries(summary.categoryStatus)) {
+        perCategorySurplus[id] = Math.max(0, s.applied - s.required);
+    }
+    // Allocate from non-required categories first to keep required totals "exactly met" in history.
+    const order = Object.keys(perCategorySurplus).sort((a, b) => CATEGORY_BY_ID[a].required - CATEGORY_BY_ID[b].required);
+    const allocation = {};
+    let remaining = Math.min(summary.totalSurplus, CARRYOVER_TOTAL_MAX);
+    for (const id of order) {
+        if (remaining <= 0) break;
+        const cap = CATEGORY_BY_ID[id].carryCap;
+        const take = Math.min(perCategorySurplus[id], cap, remaining);
+        if (take > 0) { allocation[id] = take; remaining -= take; }
+    }
+    return { allocation, perCategorySurplus };
+}
+
+function validateCarryOut(cycle, entries, allocation) {
+    const errs = [];
+    const total = Object.values(allocation).reduce((a, b) => a + Number(b || 0), 0);
+    if (total > CARRYOVER_TOTAL_MAX) errs.push(`Total carry-over (${total}) exceeds the ${CARRYOVER_TOTAL_MAX}-credit limit.`);
+    const summary = cycleSummary(cycle, entries);
+    for (const [id, amount] of Object.entries(allocation)) {
+        const cap = CATEGORY_BY_ID[id]?.carryCap ?? 6;
+        if (amount > cap) errs.push(`${CATEGORY_BY_ID[id].label}: carry-over ${amount} exceeds cap of ${cap}.`);
+        const surplus = Math.max(0, summary.categoryStatus[id].applied - summary.categoryStatus[id].required);
+        if (amount > surplus) errs.push(`${CATEGORY_BY_ID[id].label}: carry-over ${amount} exceeds surplus ${surplus}.`);
+    }
+    return errs;
+}
+
+function validateEntry(entry) {
+    const errs = [];
+    if (!entry.name?.trim()) errs.push('Name is required.');
+    if (!entry.date) errs.push('Date is required.');
+    if (!entry.cycleId) errs.push('Cycle is required.');
+    if (entryTotalCredits(entry) <= 0) errs.push('At least one credit must be logged.');
+    return errs;
+}
+
+function uid() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+function fmt(n) { return Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+function safeFolderName(s) { return String(s || '').replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120); }
+
+// ============================================================
+// XLSX → ENTRIES IMPORTER
+// Parses your specific sheet structure: cycle summary tables at top
+// (we use these to seed cycles), then individual entries grouped by
+// year header rows. Credit Type is free-text like "1 ethics, 3 prof prac"
+// — we tokenize and match against CATEGORIES.
+// ============================================================
+
+// Cycles inferred from the user's sheet layout (rows 4, 13, 22, 32, 41, 53).
+// Date format: ISO yyyy-mm-dd.
+const KNOWN_CYCLES = [
+    { label: 'First Newly Admitted Period', startDate: '2016-03-07', endDate: '2017-03-06', totalRequired: 16 },
+    { label: 'Second Newly Admitted Period', startDate: '2017-03-07', endDate: '2018-07-22', totalRequired: 16 },
+    { label: '2018–2020 Cycle',              startDate: '2018-07-22', endDate: '2020-07-22', totalRequired: 24 },
+    { label: '2020–2022 Cycle',              startDate: '2020-07-22', endDate: '2022-07-22', totalRequired: 24 },
+    { label: '2022–2024 Cycle',              startDate: '2022-07-22', endDate: '2024-07-22', totalRequired: 24 },
+    { label: '2024–2026 Cycle',              startDate: '2024-07-22', endDate: '2026-07-22', totalRequired: 24 }
+];
+
+function matchCategoryFromText(desc) {
+    const d = String(desc || '').toLowerCase();
+    // Order matters: more specific patterns first.
+    if (/cyber.*\(?ethics\)?|cybersecurity.*ethics/.test(d)) return 'cybersecurity_ethics';
+    if (/cyber|privacy|data protection/.test(d))             return 'cybersecurity_general';
+    if (/diversity|inclusion|elimination of bias/.test(d))   return 'diversity';
+    if (/skills/.test(d))                                    return 'skills';
+    if (/law practice management|^lpm$/.test(d))             return 'law_practice_management';
+    if (/prof.*prac|professional practice|areas of professional/.test(d)) return 'areas_of_professional_practice';
+    if (/ethics|professionalism/.test(d))                    return 'ethics';
+    return null;
+}
+
+// "1 ethics, 3 prof prac" → [{categoryId:'ethics',credits:1},{categoryId:'areas_of_professional_practice',credits:3}]
+function parseCreditTypeText(text) {
+    if (!text) return { credits: [], unmatched: [] };
+    const parts = String(text).split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+    const credits = [];
+    const unmatched = [];
+    for (const part of parts) {
+        const m = part.match(/^([\d.]+)\s*(.*)$/);
+        if (!m) { unmatched.push(part); continue; }
+        const num = parseFloat(m[1]);
+        if (isNaN(num) || num <= 0) { unmatched.push(part); continue; }
+        const catId = matchCategoryFromText(m[2]);
+        if (!catId) { unmatched.push(part); continue; }
+        credits.push({ categoryId: catId, credits: num });
+    }
+    return { credits, unmatched };
+}
+
+function parseDateCell(d) {
+    if (!d && d !== 0) return null;
+    if (d instanceof Date) return d.toISOString().slice(0, 10);
+    const s = String(d).trim();
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (m) {
+        let [_, mo, da, yr] = m;
+        if (yr.length === 2) yr = '20' + yr;
+        return `${yr}-${mo.padStart(2,'0')}-${da.padStart(2,'0')}`;
+    }
+    return null;
+}
+
+function parseXlsxToEntries(workbook, cycles) {
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false, cellDates: true });
+
+    // Find entries header (row containing both "Course" and "Credit Type")
+    let headerIdx = -1;
+    for (let i = 0; i < rows.length; i++) {
+        const r = rows[i].map(v => String(v || '').toLowerCase());
+        if (r.includes('course') && r.some(x => x.includes('credit type'))) { headerIdx = i; break; }
+    }
+    if (headerIdx < 0) throw new Error('Could not find entries header (row with "Course" and "Credit Type").');
+
+    const entries = [];
+    const unparsed = [];
+
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+        const r = rows[i];
+        const colA = r[0];
+        const colB = String(r[1] || '').trim();
+        const colC = r[2];
+        const colD = String(r[3] || '').trim();
+        const colE = String(r[4] || '').trim();
+        const colF = String(r[5] || '').trim();
+        const colG = String(r[6] || '').trim();
+        const colH = String(r[7] || '').trim();
+
+        // Year-divider rows: only a numeric year in col B and nothing else useful
+        if (!colB && (typeof colC === 'number' || /^\d{4}\.?0*$/.test(String(colC || '')))) continue;
+        if (!colB && !colC) continue;
+
+        const dateStr = parseDateCell(colC);
+        if (!colB || !dateStr) continue;
+
+        const { credits, unmatched } = parseCreditTypeText(colD);
+        if (credits.length === 0) {
+            unparsed.push({ rowNumber: i + 1, course: colB, creditType: colD, reason: 'no parseable credits' });
+            continue;
+        }
+
+        const cycle = cycles.find(c => dateStr >= c.startDate && dateStr <= c.endDate);
+        if (!cycle) {
+            unparsed.push({ rowNumber: i + 1, course: colB, date: dateStr, reason: 'no matching cycle' });
+            continue;
+        }
+
+        const certY = colF.toUpperCase() === 'Y';
+        const inTableY = colG.toUpperCase() === 'Y';
+        const status = (certY && inTableY) ? 'counted' : (certY ? 'cert_received' : 'attended');
+
+        entries.push({
+            id: uid(),
+            cycleId: cycle.id,
+            name: colB,
+            date: dateStr,
+            location: colE,
+            jurisdiction: colF.toUpperCase().match(/^(NY|NJ|CA|FL|TX|MA|DC)$/) ? colF.toUpperCase() : (colF.length <= 4 ? colF.toUpperCase() : 'NY'),
+            status,
+            credits,
+            driveUrl: '',
+            notes: unmatched.length ? `Could not parse credit fragments: ${unmatched.join(' | ')}` : ''
+        });
+    }
+
+    return { entries, unparsed };
+}
+
+// ============================================================
+// GOOGLE DRIVE INTEGRATION
+// drive.file scope only. App can only read/write files it created
+// or that the user explicitly opened via the picker.
+// On first connect, user picks a "CLE Tracker root" folder via the
+// picker. Subsequent uploads create per-entry folders inside it.
+// ============================================================
+let _gapiLoadingPromise = null;
+function loadGapi() {
+    if (_gapiLoadingPromise) return _gapiLoadingPromise;
+    _gapiLoadingPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://apis.google.com/js/api.js';
+        s.onload = () => gapi.load('picker', { callback: resolve, onerror: reject });
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+    return _gapiLoadingPromise;
+}
+let _gisLoadingPromise = null;
+function loadGis() {
+    if (_gisLoadingPromise) return _gisLoadingPromise;
+    _gisLoadingPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://accounts.google.com/gsi/client';
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+    return _gisLoadingPromise;
+}
+
+let _driveTokenClient = null;
+function getDriveAccessToken({ prompt = '' } = {}) {
+    if (GOOGLE_OAUTH_CLIENT_ID === 'REPLACE_ME') {
+        return Promise.reject(new Error('Drive not configured (GOOGLE_OAUTH_CLIENT_ID is REPLACE_ME).'));
+    }
+    return loadGis().then(() => new Promise((resolve, reject) => {
+        if (!_driveTokenClient) {
+            _driveTokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_OAUTH_CLIENT_ID,
+                scope: 'https://www.googleapis.com/auth/drive.file',
+                callback: () => {} // assigned per-call
+            });
+        }
+        _driveTokenClient.callback = (resp) => {
+            if (resp.error) return reject(new Error(resp.error));
+            try { localStorage.setItem(DRIVE_TOKEN_KEY, JSON.stringify({ token: resp.access_token, expiresAt: Date.now() + (resp.expires_in - 60) * 1000 })); } catch {}
+            resolve(resp.access_token);
+        };
+        _driveTokenClient.requestAccessToken({ prompt });
+    }));
+}
+
+function cachedDriveToken() {
+    try {
+        const raw = localStorage.getItem(DRIVE_TOKEN_KEY);
+        if (!raw) return null;
+        const { token, expiresAt } = JSON.parse(raw);
+        if (Date.now() < expiresAt) return token;
+    } catch {}
+    return null;
+}
+
+async function ensureDriveToken() {
+    const cached = cachedDriveToken();
+    if (cached) return cached;
+    return getDriveAccessToken();
+}
+
+async function pickDriveFolder() {
+    await loadGapi();
+    const token = await ensureDriveToken();
+    return new Promise((resolve) => {
+        const view = new google.picker.DocsView()
+            .setIncludeFolders(true)
+            .setSelectFolderEnabled(true)
+            .setMimeTypes('application/vnd.google-apps.folder');
+        const builder = new google.picker.PickerBuilder()
+            .addView(view)
+            .setOAuthToken(token)
+            .setCallback((data) => {
+                if (data.action === google.picker.Action.PICKED) {
+                    const f = data.docs[0];
+                    resolve({ id: f.id, name: f.name, url: f.url || `https://drive.google.com/drive/folders/${f.id}` });
+                } else if (data.action === google.picker.Action.CANCEL) {
+                    resolve(null);
+                }
+            });
+        if (GOOGLE_API_KEY !== 'REPLACE_ME') builder.setDeveloperKey(GOOGLE_API_KEY);
+        builder.build().setVisible(true);
+    });
+}
+
+async function driveFindOrCreateFolder(token, name, parentId) {
+    const safe = safeFolderName(name);
+    // Search inside parent (drive.file scope: only finds folders the app has access to)
+    const q = `name='${safe.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+    const search = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,webViewLink)`, {
+        headers: { Authorization: `Bearer ${token}` }
+    }).then(r => r.json());
+    if (search.files && search.files.length > 0) return search.files[0];
+    const create = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,name,webViewLink', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: safe, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] })
+    }).then(r => r.json());
+    if (create.error) throw new Error(create.error.message);
+    return create;
+}
+
+async function driveUploadFile(token, file, folderId, onProgress) {
+    const metadata = { name: file.name, parents: [folderId] };
+    const boundary = '-------cle-tracker-' + Math.random().toString(36).slice(2);
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelim = `\r\n--${boundary}--`;
+    const buf = await file.arrayBuffer();
+    const body = new Blob([
+        delimiter,
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n',
+        JSON.stringify(metadata),
+        delimiter,
+        `Content-Type: ${file.type || 'application/octet-stream'}\r\n\r\n`,
+        buf,
+        closeDelim
+    ]);
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
+        body
+    }).then(r => r.json());
+    if (res.error) throw new Error(res.error.message);
+    return res;
+}
+
+// ============================================================
+// FIREBASE INIT (lazy — only after config is set)
+// ============================================================
+function loadFbConfig() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(FB_CONFIG_KEY) || 'null');
+        if (saved && saved.apiKey && saved.apiKey !== 'REPLACE_ME') return saved;
+    } catch {}
+    if (DEFAULT_FB_CONFIG.apiKey !== 'REPLACE_ME') return DEFAULT_FB_CONFIG;
+    return null;
+}
+function saveFbConfig(cfg) { localStorage.setItem(FB_CONFIG_KEY, JSON.stringify(cfg)); }
+
+let _fbApp = null, _fbAuth = null, _fbDb = null;
+function ensureFb(cfg) {
+    if (!_fbApp) {
+        _fbApp = firebase.initializeApp(cfg);
+        _fbAuth = firebase.auth();
+        _fbDb = firebase.firestore();
+        try { _fbDb.enablePersistence({ synchronizeTabs: true }); } catch {}
+    }
+    return { auth: _fbAuth, db: _fbDb };
+}
+
+// Storage layer: a single Firestore doc per user holds all state.
+function userDocRef(db, uid) {
+    return db.collection('users').doc(uid).collection('state').doc('main');
+}
+
+async function loadUserState(db, uid) {
+    const snap = await userDocRef(db, uid).get();
+    if (!snap.exists) return emptyState();
+    const data = snap.data();
+    return {
+        cycles: data.cycles || [],
+        entries: data.entries || [],
+        settings: data.settings || {},
+        schemaVersion: data.schemaVersion || 1
+    };
+}
+
+async function saveUserState(db, uid, state) {
+    await userDocRef(db, uid).set({
+        ...state,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: false });
+}
+
+function emptyState() {
+    return { schemaVersion: 1, cycles: [], entries: [], settings: {} };
+}
+
+function defaultCycleForToday() {
+    return {
+        id: uid(),
+        label: '2024–2026',
+        startDate: '2024-07-22',
+        endDate: '2026-07-22',
+        totalRequired: TOTAL_CREDITS_REQUIRED,
+        carryIn: {},
+        carryInApplied: {}
+    };
+}
+
+// ============================================================
+// UI HELPERS
+// ============================================================
+function Stat({ label, value, tone = 'default', sublabel }) {
+    const tones = {
+        default: 'bg-white border-slate-200',
+        good:    'bg-emerald-50 border-emerald-200 text-emerald-900',
+        warn:    'bg-amber-50 border-amber-200 text-amber-900',
+        muted:   'bg-slate-50 border-slate-200 text-slate-600'
+    };
+    return (
+        <div className={`rounded-lg border p-3 ${tones[tone] || tones.default}`}>
+            <div className="text-2xl font-bold num">{fmt(value)}</div>
+            <div className="text-xs uppercase tracking-wide opacity-70">{label}</div>
+            {sublabel && <div className="text-xs opacity-60 mt-1">{sublabel}</div>}
+        </div>
+    );
+}
+
+function StatusBadge({ status }) {
+    const cfg = {
+        attended:      { label: 'Attended',      cls: 'bg-slate-100 text-slate-700' },
+        cert_received: { label: 'Cert received', cls: 'bg-blue-100 text-blue-800' },
+        counted:       { label: 'Counted',       cls: 'bg-emerald-100 text-emerald-800' }
+    }[status] || { label: status, cls: 'bg-slate-100' };
+    return <span className={`text-xs font-medium px-2 py-0.5 rounded ${cfg.cls}`}>{cfg.label}</span>;
+}
+
+function Modal({ open, onClose, children, wide }) {
+    if (!open) return null;
+    return (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center overflow-y-auto p-4" onClick={onClose}>
+            <div
+                className={`bg-white rounded-xl shadow-xl ${wide ? 'max-w-4xl' : 'max-w-2xl'} w-full mt-12 mb-12`}
+                onClick={(e) => e.stopPropagation()}
+            >
+                {children}
+            </div>
+        </div>
+    );
+}
+
+// ============================================================
+// SETUP / SIGN IN
+// ============================================================
+function FirebaseSetup({ onSaved }) {
+    const [json, setJson] = useState('');
+    const [err, setErr] = useState('');
+    function save() {
+        try {
+            const cfg = JSON.parse(json);
+            const required = ['apiKey', 'authDomain', 'projectId', 'appId'];
+            for (const k of required) if (!cfg[k]) throw new Error(`Missing ${k}`);
+            saveFbConfig(cfg);
+            onSaved(cfg);
+        } catch (e) {
+            setErr(e.message);
+        }
+    }
+    return (
+        <div className="min-h-screen flex items-center justify-center p-6">
+            <div className="max-w-xl w-full bg-white rounded-xl shadow p-6">
+                <h1 className="text-2xl font-bold mb-2">CLE Tracker — Setup</h1>
+                <p className="text-sm text-slate-600 mb-4">
+                    Paste your Firebase web config below. Get it from the Firebase console under
+                    Project settings → General → Your apps → Web app config.
+                </p>
+                <textarea
+                    className="w-full font-mono text-xs border rounded p-3 h-56"
+                    placeholder={`{\n  "apiKey": "...",\n  "authDomain": "....firebaseapp.com",\n  "projectId": "...",\n  "appId": "..."\n}`}
+                    value={json}
+                    onChange={(e) => setJson(e.target.value)}
+                />
+                {err && <div className="text-red-600 text-sm mt-2">{err}</div>}
+                <button className="mt-3 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded font-semibold" onClick={save}>
+                    Save & continue
+                </button>
+                <p className="text-xs text-slate-500 mt-4">
+                    Stored in your browser's localStorage. You only do this once per browser.
+                    To pre-bake the config into the app, edit <code>DEFAULT_FB_CONFIG</code> in <code>index.html</code> and re-deploy.
+                </p>
+            </div>
+        </div>
+    );
+}
+
+function SignIn({ auth }) {
+    const [busy, setBusy] = useState(false);
+    const [err, setErr] = useState('');
+    async function go() {
+        setBusy(true); setErr('');
+        try {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            await auth.signInWithPopup(provider);
+        } catch (e) {
+            setErr(e.message);
+        } finally {
+            setBusy(false);
+        }
+    }
+    return (
+        <div className="min-h-screen flex items-center justify-center p-6">
+            <div className="max-w-md w-full bg-white rounded-xl shadow p-8 text-center">
+                <div className="text-4xl mb-2">⚖️</div>
+                <h1 className="text-2xl font-bold">CLE Tracker</h1>
+                <p className="text-sm text-slate-500 mt-1 mb-6">Sign in with Google to continue.</p>
+                <button onClick={go} disabled={busy} className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded font-semibold w-full">
+                    {busy ? 'Signing in…' : 'Sign in with Google'}
+                </button>
+                {err && <div className="text-red-600 text-sm mt-3">{err}</div>}
+            </div>
+        </div>
+    );
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+function CycleDashboard({ cycle, entries, onEditCarryIn, onPlanCarryOut }) {
+    if (!cycle) return <div className="p-6 text-slate-500">No cycle selected.</div>;
+    const summary = cycleSummary(cycle, entries);
+    return (
+        <section className="p-4 sm:p-6 space-y-6">
+            <header className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                    <h2 className="text-2xl font-bold">{cycle.label || `${cycle.startDate} → ${cycle.endDate}`}</h2>
+                    <div className="text-sm text-slate-500">{cycle.startDate} → {cycle.endDate}</div>
+                </div>
+                <div className="flex gap-2">
+                    <button className="bg-white border px-3 py-1.5 rounded text-sm hover:bg-slate-50" onClick={onEditCarryIn}>
+                        Edit carry-in
+                    </button>
+                    <button className="bg-white border px-3 py-1.5 rounded text-sm hover:bg-slate-50" onClick={onPlanCarryOut}>
+                        Plan carry-out
+                    </button>
+                </div>
+            </header>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                <Stat label="Required"            value={summary.totalRequired} />
+                <Stat label="Earned"              value={summary.totalEarnedThisCycle} />
+                <Stat label="Carry-in applied"    value={summary.totalCarryInApplied} />
+                <Stat label="Total applied"       value={summary.totalApplied} />
+                <Stat label="Still needed"        value={summary.totalStillNeeded} tone={summary.totalStillNeeded > 0 ? 'warn' : 'good'} />
+                <Stat label="Surplus"             value={summary.totalSurplus} tone="muted" />
+                <Stat label="Carry-out cap"       value={summary.totalCarryOutMax} tone="muted" sublabel={`max ${CARRYOVER_TOTAL_MAX}`} />
+            </div>
+
+            <div className="bg-white rounded-lg border overflow-hidden">
+                <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-slate-700">
+                        <tr>
+                            <th className="text-left p-2 px-3">Category</th>
+                            <th className="text-right p-2 px-3">Required</th>
+                            <th className="text-right p-2 px-3">Carry-in available</th>
+                            <th className="text-right p-2 px-3">Carry-in applied</th>
+                            <th className="text-right p-2 px-3">Earned</th>
+                            <th className="text-right p-2 px-3">Total applied</th>
+                            <th className="text-right p-2 px-3">Still needed</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {CATEGORIES.map(cat => {
+                            const s = summary.categoryStatus[cat.id];
+                            return (
+                                <tr key={cat.id} className={`border-t ${s.stillNeeded > 0 ? 'row-warn' : ''}`}>
+                                    <td className="p-2 px-3">
+                                        <div className="font-medium">{cat.label}</div>
+                                        {cat.note && <div className="text-xs text-slate-500">{cat.note}</div>}
+                                    </td>
+                                    <td className="p-2 px-3 text-right num">{s.required || ''}</td>
+                                    <td className="p-2 px-3 text-right num">{s.carryIn || ''}</td>
+                                    <td className="p-2 px-3 text-right num">{s.carryInApplied || ''}</td>
+                                    <td className="p-2 px-3 text-right num">{s.earned || ''}</td>
+                                    <td className="p-2 px-3 text-right num font-semibold">{s.applied || ''}</td>
+                                    <td className={`p-2 px-3 text-right num ${s.stillNeeded > 0 ? 'text-amber-700 font-semibold' : 'text-slate-400'}`}>
+                                        {s.stillNeeded || ''}
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    );
+}
+
+// ============================================================
+// ENTRIES
+// ============================================================
+function EntriesView({ entries, cycles, activeCycleId, onAdd, onEdit, onDelete }) {
+    const [filterCycle, setFilterCycle] = useState(activeCycleId || 'all');
+    const [filterStatus, setFilterStatus] = useState('all');
+    const [search, setSearch] = useState('');
+
+    const visible = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        return entries
+            .filter(e => filterCycle === 'all' || e.cycleId === filterCycle)
+            .filter(e => filterStatus === 'all' || e.status === filterStatus)
+            .filter(e => !q || (e.name || '').toLowerCase().includes(q) || (e.location || '').toLowerCase().includes(q))
+            .sort((a, b) => (a.date < b.date ? 1 : -1));
+    }, [entries, filterCycle, filterStatus, search]);
+
+    return (
+        <section className="p-4 sm:p-6 space-y-4">
+            <header className="flex flex-wrap items-center gap-2">
+                <h2 className="text-2xl font-bold mr-auto">CLE entries</h2>
+                <input
+                    placeholder="Search…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="border rounded px-2 py-1 text-sm bg-white"
+                />
+                <select className="border rounded px-2 py-1 text-sm bg-white" value={filterCycle} onChange={(e) => setFilterCycle(e.target.value)}>
+                    <option value="all">All cycles</option>
+                    {cycles.map(c => <option key={c.id} value={c.id}>{c.label || `${c.startDate} → ${c.endDate}`}</option>)}
+                </select>
+                <select className="border rounded px-2 py-1 text-sm bg-white" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                    <option value="all">All statuses</option>
+                    {ENTRY_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
+                <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-sm font-semibold" onClick={onAdd}>+ Add CLE</button>
+            </header>
+
+            <div className="bg-white rounded-lg border overflow-x-auto">
+                <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-slate-700">
+                        <tr>
+                            <th className="text-left p-2 px-3">Date</th>
+                            <th className="text-left p-2 px-3">Name</th>
+                            <th className="text-left p-2 px-3">Categories</th>
+                            <th className="text-right p-2 px-3">Credits</th>
+                            <th className="text-left p-2 px-3">Location</th>
+                            <th className="text-left p-2 px-3">Juris.</th>
+                            <th className="text-left p-2 px-3">Status</th>
+                            <th className="text-left p-2 px-3">Materials</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {visible.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-slate-400">No entries match.</td></tr>}
+                        {visible.map(e => {
+                            const ec = entryCreditsByCategory(e);
+                            const total = entryTotalCredits(e);
+                            return (
+                                <tr key={e.id} className="border-t hover:bg-slate-50">
+                                    <td className="p-2 px-3 num">{e.date}</td>
+                                    <td className="p-2 px-3">
+                                        <button className="text-indigo-700 hover:underline font-medium text-left" onClick={() => onEdit(e)}>{e.name}</button>
+                                    </td>
+                                    <td className="p-2 px-3">
+                                        <div className="flex flex-wrap gap-1">
+                                            {Object.entries(ec).map(([catId, n]) => (
+                                                <span key={catId} className="text-xs bg-slate-100 rounded px-1.5 py-0.5">
+                                                    {(CATEGORY_BY_ID[catId]?.label || catId).split('—')[0].trim()}: <strong>{n}</strong>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </td>
+                                    <td className="p-2 px-3 text-right num font-semibold">{total}</td>
+                                    <td className="p-2 px-3">{e.location}</td>
+                                    <td className="p-2 px-3">{e.jurisdiction}</td>
+                                    <td className="p-2 px-3"><StatusBadge status={e.status} /></td>
+                                    <td className="p-2 px-3">
+                                        {e.driveUrl
+                                            ? <a className="text-indigo-700 hover:underline" href={e.driveUrl} target="_blank" rel="noreferrer">Open</a>
+                                            : <span className="text-slate-300">—</span>}
+                                    </td>
+                                    <td className="p-2 px-3 text-right">
+                                        <button className="text-red-600 hover:underline text-xs" onClick={() => { if (confirm('Delete this entry?')) onDelete(e.id); }}>delete</button>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    );
+}
+
+// Reads/writes the Drive parent folder from localStorage.
+function getDriveParentFolder() {
+    try { return JSON.parse(localStorage.getItem(DRIVE_PARENT_KEY) || 'null'); } catch { return null; }
+}
+function setDriveParentFolder(f) {
+    if (f) localStorage.setItem(DRIVE_PARENT_KEY, JSON.stringify(f));
+    else localStorage.removeItem(DRIVE_PARENT_KEY);
+}
+
+// Drive folder field with drag-drop upload.
+// Behavior:
+//   - If the entry already has a folder linked, files dropped go into that folder.
+//   - If not, we create one named "<date> <course name>" inside the configured parent.
+function DriveFolderField({ draft, setDraft }) {
+    const [busy, setBusy] = useState('');
+    const [err, setErr] = useState('');
+    const [uploaded, setUploaded] = useState([]);
+    const dragCount = useRef(0);
+    const [dragOver, setDragOver] = useState(false);
+    const driveConfigured = GOOGLE_OAUTH_CLIENT_ID !== 'REPLACE_ME';
+
+    const parentFolder = getDriveParentFolder();
+
+    async function ensureEntryFolder() {
+        if (!parentFolder) throw new Error('No Drive parent folder set. Go to Settings → Connect Drive first.');
+        const token = await ensureDriveToken();
+        if (draft.driveUrl && draft._driveFolderId) {
+            return { id: draft._driveFolderId, url: draft.driveUrl, token };
+        }
+        const folderName = `${draft.date || 'undated'} ${safeFolderName(draft.name) || 'unnamed entry'}`.trim();
+        const folder = await driveFindOrCreateFolder(token, folderName, parentFolder.id);
+        const url = folder.webViewLink || `https://drive.google.com/drive/folders/${folder.id}`;
+        setDraft(d => ({ ...d, driveUrl: url, _driveFolderId: folder.id }));
+        return { id: folder.id, url, token };
+    }
+
+    async function pickExistingFolder() {
+        try {
+            setErr(''); setBusy('Opening Drive picker…');
+            const f = await pickDriveFolder();
+            if (f) {
+                setDraft(d => ({ ...d, driveUrl: f.url, _driveFolderId: f.id }));
+            }
+        } catch (e) { setErr(e.message); }
+        finally { setBusy(''); }
+    }
+
+    async function handleFiles(files) {
+        if (!files || files.length === 0) return;
+        if (!driveConfigured) { setErr('Drive integration not set up — see Settings.'); return; }
+        setErr('');
+        try {
+            setBusy('Preparing folder…');
+            const { id: folderId, token } = await ensureEntryFolder();
+            const fresh = [];
+            for (let i = 0; i < files.length; i++) {
+                const f = files[i];
+                setBusy(`Uploading ${i + 1} of ${files.length}: ${f.name}`);
+                const up = await driveUploadFile(token, f, folderId);
+                fresh.push({ name: up.name, url: up.webViewLink });
+            }
+            setUploaded((u) => [...u, ...fresh]);
+            setBusy('');
+        } catch (e) {
+            setErr(e.message); setBusy('');
+        }
+    }
+
+    function onDrop(ev) {
+        ev.preventDefault();
+        setDragOver(false); dragCount.current = 0;
+        handleFiles(Array.from(ev.dataTransfer?.files || []));
+    }
+
+    return (
+        <div className="space-y-2">
+            <div className="flex gap-2">
+                <input className="border rounded p-2 flex-1 text-sm" placeholder="Folder URL (auto-fills when you drop files)"
+                    value={draft.driveUrl} onChange={(e) => setDraft(d => ({ ...d, driveUrl: e.target.value }))} />
+                {driveConfigured && (
+                    <button type="button" className="border rounded px-3 py-1 text-sm hover:bg-slate-50" onClick={pickExistingFolder}>
+                        Pick existing…
+                    </button>
+                )}
+            </div>
+            {driveConfigured ? (
+                <div
+                    onDragEnter={(e) => { e.preventDefault(); dragCount.current++; setDragOver(true); }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDragLeave={() => { dragCount.current--; if (dragCount.current === 0) setDragOver(false); }}
+                    onDrop={onDrop}
+                    className={`rounded border-2 border-dashed p-4 text-center text-sm ${dragOver ? 'bg-indigo-50 border-indigo-400' : 'bg-slate-50 border-slate-300 text-slate-600'}`}>
+                    {busy
+                        ? <span>{busy}</span>
+                        : <>
+                            <strong>Drag &amp; drop materials here</strong>
+                            <div className="text-xs text-slate-500">
+                                {parentFolder
+                                    ? <>App will create a folder named "<em>{draft.date || 'date'} {safeFolderName(draft.name) || 'name'}</em>" inside <em>{parentFolder.name}</em> and upload your files.</>
+                                    : <>First, set the Drive parent folder in Settings → Connect Drive.</>}
+                            </div>
+                            <input type="file" multiple className="hidden" id={`fileinput-${draft.id}`} onChange={(e) => handleFiles(Array.from(e.target.files || []))} />
+                            <label htmlFor={`fileinput-${draft.id}`} className="text-indigo-700 hover:underline cursor-pointer text-xs">or click to choose files</label>
+                        </>}
+                </div>
+            ) : (
+                <p className="text-xs text-slate-500">Drive integration not configured. Paste a URL above, or set up <code>GOOGLE_OAUTH_CLIENT_ID</code> in <code>index.html</code>.</p>
+            )}
+            {uploaded.length > 0 && (
+                <ul className="text-xs space-y-0.5 bg-emerald-50 border border-emerald-200 rounded p-2">
+                    {uploaded.map((u, i) => <li key={i}>✓ <a className="text-indigo-700 hover:underline" href={u.url} target="_blank" rel="noreferrer">{u.name}</a></li>)}
+                </ul>
+            )}
+            {err && <div className="text-red-600 text-xs">{err}</div>}
+        </div>
+    );
+}
+
+function EntryForm({ entry, cycles, defaultCycleId, onSave, onCancel }) {
+    const [draft, setDraft] = useState(() => ({
+        id: entry?.id || uid(),
+        cycleId: entry?.cycleId || defaultCycleId || cycles[0]?.id || '',
+        name: entry?.name || '',
+        date: entry?.date || new Date().toISOString().slice(0, 10),
+        location: entry?.location || '',
+        jurisdiction: entry?.jurisdiction || 'NY',
+        status: entry?.status || 'attended',
+        credits: entry?.credits?.length ? entry.credits : [{ categoryId: 'areas_of_professional_practice', credits: 0 }],
+        driveUrl: entry?.driveUrl || '',
+        notes: entry?.notes || ''
+    }));
+    const [errors, setErrors] = useState([]);
+    const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+    const setRow = (i, k, v) => setDraft(d => {
+        const credits = d.credits.slice();
+        credits[i] = { ...credits[i], [k]: k === 'credits' ? Number(v) : v };
+        return { ...d, credits };
+    });
+    const addRow = () => setDraft(d => ({ ...d, credits: [...d.credits, { categoryId: 'areas_of_professional_practice', credits: 0 }] }));
+    const rmRow  = (i) => setDraft(d => ({ ...d, credits: d.credits.filter((_, j) => j !== i) }));
+
+    function submit(e) {
+        e.preventDefault();
+        const errs = validateEntry(draft);
+        if (errs.length) return setErrors(errs);
+        onSave(draft);
+    }
+
+    return (
+        <form onSubmit={submit} className="p-6 space-y-4">
+            <h2 className="text-xl font-bold">{entry ? 'Edit CLE' : 'Add CLE'}</h2>
+            <div className="grid grid-cols-2 gap-3">
+                <Field label="Name" full>
+                    <input className="border rounded p-2 w-full" value={draft.name} onChange={(e) => set('name', e.target.value)} required />
+                </Field>
+                <Field label="Date">
+                    <input type="date" className="border rounded p-2 w-full" value={draft.date} onChange={(e) => set('date', e.target.value)} required />
+                </Field>
+                <Field label="Cycle">
+                    <select className="border rounded p-2 w-full bg-white" value={draft.cycleId} onChange={(e) => set('cycleId', e.target.value)}>
+                        {cycles.map(c => <option key={c.id} value={c.id}>{c.label || `${c.startDate} → ${c.endDate}`}</option>)}
+                    </select>
+                </Field>
+                <Field label="Location">
+                    <input className="border rounded p-2 w-full" value={draft.location} onChange={(e) => set('location', e.target.value)} />
+                </Field>
+                <Field label="Jurisdiction">
+                    <input className="border rounded p-2 w-full" value={draft.jurisdiction} onChange={(e) => set('jurisdiction', e.target.value)} />
+                </Field>
+                <Field label="Status" full>
+                    <select className="border rounded p-2 w-full bg-white" value={draft.status} onChange={(e) => set('status', e.target.value)}>
+                        {ENTRY_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    </select>
+                </Field>
+                <Field label="Drive folder" full>
+                    <DriveFolderField draft={draft} setDraft={setDraft} />
+                </Field>
+                <Field label="Notes" full>
+                    <textarea className="border rounded p-2 w-full" rows={2} value={draft.notes} onChange={(e) => set('notes', e.target.value)} />
+                </Field>
+            </div>
+
+            <div>
+                <h3 className="font-semibold mb-2">Credits per category</h3>
+                <div className="space-y-2">
+                    {draft.credits.map((row, i) => (
+                        <div key={i} className="flex gap-2 items-center">
+                            <select className="border rounded p-1.5 flex-1 bg-white text-sm" value={row.categoryId} onChange={(e) => setRow(i, 'categoryId', e.target.value)}>
+                                {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                            </select>
+                            <input type="number" step="0.5" min="0" className="border rounded p-1.5 w-24 text-sm num" value={row.credits} onChange={(e) => setRow(i, 'credits', e.target.value)} />
+                            {draft.credits.length > 1 && <button type="button" className="text-red-600 text-xs hover:underline" onClick={() => rmRow(i)}>remove</button>}
+                        </div>
+                    ))}
+                    <button type="button" className="text-indigo-700 text-sm hover:underline" onClick={addRow}>+ add another category</button>
+                </div>
+            </div>
+
+            {errors.length > 0 && <ul className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800 list-disc list-inside">
+                {errors.map((e, i) => <li key={i}>{e}</li>)}
+            </ul>}
+
+            <div className="flex gap-2 justify-end pt-2 border-t">
+                <button type="button" className="px-3 py-2 rounded border" onClick={onCancel}>Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold">Save</button>
+            </div>
+        </form>
+    );
+}
+
+function Field({ label, children, full }) {
+    return (
+        <label className={`block ${full ? 'col-span-2' : ''}`}>
+            <span className="text-xs uppercase tracking-wide text-slate-500 block mb-1">{label}</span>
+            {children}
+        </label>
+    );
+}
+
+// ============================================================
+// CARRY-IN / CARRY-OUT
+// ============================================================
+function CarryInEditor({ cycle, onSave, onClose }) {
+    const [carryIn, setCarryIn] = useState({ ...(cycle.carryIn || {}) });
+    const [carryInApplied, setCarryInApplied] = useState({ ...(cycle.carryInApplied || {}) });
+    const totalIn = Object.values(carryIn).reduce((a, b) => a + Number(b || 0), 0);
+    const totalApplied = Object.values(carryInApplied).reduce((a, b) => a + Number(b || 0), 0);
+    const errs = [];
+    if (totalIn > CARRYOVER_TOTAL_MAX) errs.push(`Total carry-in (${totalIn}) exceeds the ${CARRYOVER_TOTAL_MAX}-credit cap.`);
+    for (const cat of CATEGORIES) {
+        const a = carryInApplied[cat.id] || 0;
+        const c = carryIn[cat.id] || 0;
+        if (a > c) errs.push(`${cat.label}: applied (${a}) > available (${c}).`);
+    }
+
+    return (
+        <div className="p-6 space-y-3">
+            <h2 className="text-xl font-bold">Carry-in for {cycle.label || cycle.startDate}</h2>
+            <p className="text-sm text-slate-600">
+                <strong>Available</strong> = what was carried over from the previous cycle.{' '}
+                <strong>Applied</strong> = how much you choose to use in this cycle.
+            </p>
+            <table className="w-full text-sm border rounded">
+                <thead className="bg-slate-50">
+                    <tr>
+                        <th className="text-left p-2">Category</th>
+                        <th className="text-right p-2">Available</th>
+                        <th className="text-right p-2">Applied this cycle</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {CATEGORIES.map(cat => (
+                        <tr key={cat.id} className="border-t">
+                            <td className="p-2">{cat.label}</td>
+                            <td className="p-2 text-right">
+                                <input type="number" step="0.5" min="0" className="border rounded p-1 w-20 text-right num" value={carryIn[cat.id] || 0}
+                                    onChange={(e) => setCarryIn(m => ({ ...m, [cat.id]: Math.max(0, Number(e.target.value) || 0) }))} />
+                            </td>
+                            <td className="p-2 text-right">
+                                <input type="number" step="0.5" min="0" className="border rounded p-1 w-20 text-right num" value={carryInApplied[cat.id] || 0}
+                                    onChange={(e) => setCarryInApplied(m => ({ ...m, [cat.id]: Math.max(0, Number(e.target.value) || 0) }))} />
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+                <tfoot>
+                    <tr className="border-t font-semibold bg-slate-50">
+                        <td className="p-2">Total</td>
+                        <td className={`p-2 text-right num ${totalIn > CARRYOVER_TOTAL_MAX ? 'text-amber-700' : ''}`}>{totalIn}</td>
+                        <td className="p-2 text-right num">{totalApplied}</td>
+                    </tr>
+                </tfoot>
+            </table>
+            {errs.length > 0 && <ul className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800 list-disc list-inside">{errs.map((e, i) => <li key={i}>{e}</li>)}</ul>}
+            <div className="flex gap-2 justify-end pt-2 border-t">
+                <button className="px-3 py-2 rounded border" onClick={onClose}>Cancel</button>
+                <button disabled={errs.length > 0} className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50"
+                    onClick={() => onSave({ carryIn, carryInApplied })}>Save</button>
+            </div>
+        </div>
+    );
+}
+
+function CarryOutPlanner({ cycle, entries, cycles, onApply, onClose }) {
+    const summary = useMemo(() => cycleSummary(cycle, entries), [cycle, entries]);
+    const suggestion = useMemo(() => suggestCarryOut(cycle, entries), [cycle, entries]);
+    const [allocation, setAllocation] = useState(suggestion.allocation);
+    const [targetCycleId, setTargetCycleId] = useState(() => {
+        const next = cycles.find(c => c.id !== cycle.id && c.startDate >= cycle.endDate);
+        return next?.id || '';
+    });
+    const errs = validateCarryOut(cycle, entries, allocation);
+    const total = Object.values(allocation).reduce((a, b) => a + Number(b || 0), 0);
+
+    return (
+        <div className="p-6 space-y-3">
+            <h2 className="text-xl font-bold">Plan carry-over to next cycle</h2>
+            <p className="text-sm text-slate-600">
+                Earned: <strong>{summary.totalApplied}</strong> / {summary.totalRequired} required.
+                Surplus: <strong>{summary.totalSurplus}</strong>. NY allows up to {CARRYOVER_TOTAL_MAX} credits forward.
+            </p>
+            <table className="w-full text-sm border rounded">
+                <thead className="bg-slate-50">
+                    <tr>
+                        <th className="text-left p-2">Category</th>
+                        <th className="text-right p-2">Surplus</th>
+                        <th className="text-right p-2">Cap</th>
+                        <th className="text-right p-2">Carry forward</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {CATEGORIES.map(cat => {
+                        const surplus = suggestion.perCategorySurplus[cat.id] || 0;
+                        return (
+                            <tr key={cat.id} className="border-t">
+                                <td className="p-2">{cat.label}</td>
+                                <td className="p-2 text-right num">{surplus}</td>
+                                <td className="p-2 text-right num text-slate-500">{cat.carryCap}</td>
+                                <td className="p-2 text-right">
+                                    <input type="number" step="0.5" min="0" className="border rounded p-1 w-20 text-right num"
+                                        value={allocation[cat.id] || 0}
+                                        onChange={(e) => setAllocation(a => ({ ...a, [cat.id]: Math.max(0, Number(e.target.value) || 0) }))} />
+                                </td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+                <tfoot>
+                    <tr className="border-t bg-slate-50 font-semibold">
+                        <td colSpan={3} className="p-2 text-right">Total</td>
+                        <td className={`p-2 text-right num ${total > CARRYOVER_TOTAL_MAX ? 'text-amber-700' : ''}`}>{total} / {CARRYOVER_TOTAL_MAX}</td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-600">Apply to cycle:</span>
+                <select className="border rounded p-1.5 bg-white text-sm" value={targetCycleId} onChange={(e) => setTargetCycleId(e.target.value)}>
+                    <option value="">— select target cycle —</option>
+                    {cycles.filter(c => c.id !== cycle.id).map(c => <option key={c.id} value={c.id}>{c.label || c.startDate}</option>)}
+                </select>
+            </div>
+
+            {errs.length > 0 && <ul className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800 list-disc list-inside">{errs.map((e, i) => <li key={i}>{e}</li>)}</ul>}
+
+            <div className="flex gap-2 justify-end pt-2 border-t">
+                <button className="px-3 py-2 rounded border" onClick={() => setAllocation(suggestion.allocation)}>Reset to suggestion</button>
+                <button className="px-3 py-2 rounded border" onClick={onClose}>Close</button>
+                <button disabled={errs.length > 0 || !targetCycleId} className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50"
+                    onClick={() => onApply({ allocation, targetCycleId })}>
+                    Apply to next cycle
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ============================================================
+// CYCLES MANAGER
+// ============================================================
+function CyclesManager({ cycles, activeCycleId, onSetActive, onAdd, onUpdate, onDelete }) {
+    const [editing, setEditing] = useState(null); // draft cycle being edited or added
+    function startNew() {
+        setEditing({ id: uid(), label: '', startDate: '', endDate: '', totalRequired: TOTAL_CREDITS_REQUIRED, carryIn: {}, carryInApplied: {}, _new: true });
+    }
+    function save() {
+        if (editing._new) onAdd({ ...editing, _new: undefined });
+        else onUpdate(editing);
+        setEditing(null);
+    }
+
+    return (
+        <section className="p-4 sm:p-6 space-y-4">
+            <header className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold">Cycles</h2>
+                <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-sm font-semibold" onClick={startNew}>+ Add cycle</button>
+            </header>
+            <div className="bg-white rounded-lg border overflow-hidden">
+                <table className="w-full text-sm">
+                    <thead className="bg-slate-50">
+                        <tr>
+                            <th className="text-left p-2 px-3">Label</th>
+                            <th className="text-left p-2 px-3">Start</th>
+                            <th className="text-left p-2 px-3">End</th>
+                            <th className="text-right p-2 px-3">Required</th>
+                            <th className="text-center p-2 px-3">Active</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {cycles.map(c => (
+                            <tr key={c.id} className="border-t">
+                                <td className="p-2 px-3">{c.label || '(unlabeled)'}</td>
+                                <td className="p-2 px-3 num">{c.startDate}</td>
+                                <td className="p-2 px-3 num">{c.endDate}</td>
+                                <td className="p-2 px-3 text-right num">{c.totalRequired || TOTAL_CREDITS_REQUIRED}</td>
+                                <td className="p-2 px-3 text-center">
+                                    <input type="radio" name="active-cycle" checked={c.id === activeCycleId} onChange={() => onSetActive(c.id)} />
+                                </td>
+                                <td className="p-2 px-3 text-right space-x-2">
+                                    <button className="text-indigo-700 hover:underline text-xs" onClick={() => setEditing({ ...c })}>edit</button>
+                                    <button className="text-red-600 hover:underline text-xs" onClick={() => { if (confirm('Delete cycle? Entries assigned to it become orphans.')) onDelete(c.id); }}>delete</button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            <Modal open={!!editing} onClose={() => setEditing(null)}>
+                {editing && (
+                    <div className="p-6 space-y-3">
+                        <h3 className="text-lg font-bold">{editing._new ? 'Add cycle' : 'Edit cycle'}</h3>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Field label="Label" full><input className="border rounded p-2 w-full" value={editing.label} onChange={(e) => setEditing({ ...editing, label: e.target.value })} placeholder="e.g. 2026–2028" /></Field>
+                            <Field label="Start date"><input type="date" className="border rounded p-2 w-full" value={editing.startDate} onChange={(e) => setEditing({ ...editing, startDate: e.target.value })} /></Field>
+                            <Field label="End date"><input type="date" className="border rounded p-2 w-full" value={editing.endDate} onChange={(e) => setEditing({ ...editing, endDate: e.target.value })} /></Field>
+                            <Field label="Total required"><input type="number" step="0.5" className="border rounded p-2 w-full num" value={editing.totalRequired || TOTAL_CREDITS_REQUIRED} onChange={(e) => setEditing({ ...editing, totalRequired: Number(e.target.value) || 0 })} /></Field>
+                        </div>
+                        <div className="flex gap-2 justify-end pt-2 border-t">
+                            <button className="px-3 py-2 rounded border" onClick={() => setEditing(null)}>Cancel</button>
+                            <button className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold" onClick={save}>Save</button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+        </section>
+    );
+}
+
+// ============================================================
+// SETTINGS — import/export, xlsx import, sign out
+// ============================================================
+function SettingsView({ state, onReplaceState, user, onSignOut }) {
+    const fileRef = useRef(null);
+    const xlsxRef = useRef(null);
+    const [msg, setMsg] = useState('');
+
+    function exportJson() {
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `cle-tracker-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    async function importJson(e) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const parsed = JSON.parse(await file.text());
+            if (!Array.isArray(parsed.cycles) || !Array.isArray(parsed.entries)) throw new Error('JSON missing cycles or entries');
+            if (!confirm('Replace current data with imported file?')) return;
+            onReplaceState(parsed);
+            setMsg('Imported.');
+        } catch (err) { setMsg('Error: ' + err.message); }
+    }
+
+    async function importXlsx(e) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const buf = await file.arrayBuffer();
+            const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+
+            // Ensure all known cycles exist (create missing, keep existing).
+            let cycles = state.cycles.slice();
+            for (const k of KNOWN_CYCLES) {
+                const exists = cycles.find(c => c.startDate === k.startDate && c.endDate === k.endDate);
+                if (!exists) {
+                    cycles.push({ id: uid(), label: k.label, startDate: k.startDate, endDate: k.endDate, totalRequired: k.totalRequired, carryIn: {}, carryInApplied: {} });
+                }
+            }
+
+            const { entries: newEntries, unparsed } = parseXlsxToEntries(wb, cycles);
+
+            const summary = `Parsed ${newEntries.length} entries across ${[...new Set(newEntries.map(e => e.cycleId))].length} cycles. ${unparsed.length} rows skipped.`;
+            console.log('Import summary:', summary);
+            console.log('Imported entries:', newEntries);
+            console.log('Skipped rows:', unparsed);
+
+            if (!confirm(`${summary}\n\nReplace current cycles + entries with imported data?`)) return;
+
+            // Find the current cycle (today's date)
+            const today = new Date().toISOString().slice(0, 10);
+            const activeCycleId = (cycles.find(c => today >= c.startDate && today <= c.endDate) || cycles[cycles.length - 1])?.id;
+
+            onReplaceState({
+                ...state,
+                cycles,
+                entries: newEntries,
+                settings: { ...(state.settings || {}), activeCycleId, _xlsxImportedAt: new Date().toISOString(), _xlsxUnparsed: unparsed }
+            });
+            setMsg(`${summary} ${unparsed.length ? '(See console for skipped rows.)' : ''}`);
+        } catch (err) {
+            console.error(err);
+            setMsg('Error: ' + err.message);
+        }
+    }
+
+    const [drivePickBusy, setDrivePickBusy] = useState(false);
+    const [driveErr, setDriveErr] = useState('');
+    const [driveParent, setDriveParent] = useState(getDriveParentFolder());
+    async function connectDrive() {
+        setDriveErr(''); setDrivePickBusy(true);
+        try {
+            const f = await pickDriveFolder();
+            if (f) { setDriveParentFolder(f); setDriveParent(f); }
+        } catch (e) { setDriveErr(e.message); }
+        finally { setDrivePickBusy(false); }
+    }
+    function disconnectDrive() {
+        if (!confirm('Disconnect Drive? Existing folder links on entries are kept.')) return;
+        setDriveParentFolder(null);
+        localStorage.removeItem(DRIVE_TOKEN_KEY);
+        setDriveParent(null);
+    }
+
+    return (
+        <section className="p-4 sm:p-6 space-y-4 max-w-3xl">
+            <h2 className="text-2xl font-bold">Settings</h2>
+            <div className="bg-white rounded-lg border p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="text-sm text-slate-500">Signed in as</div>
+                        <div className="font-medium">{user?.email}</div>
+                    </div>
+                    <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50" onClick={onSignOut}>Sign out</button>
+                </div>
+                <div className="text-xs text-slate-500">App version: {APP_VERSION}</div>
+            </div>
+
+            <div className="bg-white rounded-lg border p-4 space-y-3">
+                <h3 className="font-semibold">Backup &amp; restore</h3>
+                <div className="flex gap-2">
+                    <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50" onClick={exportJson}>Export JSON</button>
+                    <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50" onClick={() => fileRef.current?.click()}>Import JSON</button>
+                    <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={importJson} />
+                </div>
+            </div>
+
+            <div className="bg-white rounded-lg border p-4 space-y-3">
+                <h3 className="font-semibold">Import from your CLE spreadsheet (.xlsx)</h3>
+                <p className="text-sm text-slate-600">
+                    Pick the .xlsx exported from Google Sheets. The app will auto-create your historical cycles (2016 → 2026) and parse each row in the entries section into per-category credits. Anything it can't parse goes to the console with the row number.
+                </p>
+                <div className="flex gap-2 items-center">
+                    <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50" onClick={() => xlsxRef.current?.click()}>Pick .xlsx</button>
+                    <input ref={xlsxRef} type="file" accept=".xlsx,.xls,.xlsm,.csv" className="hidden" onChange={importXlsx} />
+                </div>
+            </div>
+
+            <div className="bg-white rounded-lg border p-4 space-y-3">
+                <h3 className="font-semibold">Google Drive</h3>
+                {GOOGLE_OAUTH_CLIENT_ID === 'REPLACE_ME' ? (
+                    <p className="text-sm text-amber-700">
+                        Not configured yet. Set <code>GOOGLE_OAUTH_CLIENT_ID</code> in <code>index.html</code> and redeploy.
+                        See SETUP.md for the Google Cloud OAuth client setup.
+                    </p>
+                ) : driveParent ? (
+                    <>
+                        <p className="text-sm text-slate-600">
+                            CLE Tracker root: <a className="text-indigo-700 hover:underline" href={`https://drive.google.com/drive/folders/${driveParent.id}`} target="_blank" rel="noreferrer">{driveParent.name}</a>
+                        </p>
+                        <p className="text-xs text-slate-500">When you drag files onto an entry, the app creates a subfolder named "<em>{`{date}`} {`{course name}`}</em>" inside this folder and uploads to it.</p>
+                        <div className="flex gap-2">
+                            <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50" onClick={connectDrive} disabled={drivePickBusy}>Change folder…</button>
+                            <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50 text-red-600" onClick={disconnectDrive}>Disconnect</button>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-sm text-slate-600">Pick a folder in your Drive to be the CLE Tracker root. Per-entry folders + uploads go inside it.</p>
+                        <button className="px-3 py-1.5 rounded border text-sm hover:bg-slate-50 bg-indigo-50 border-indigo-200 text-indigo-800 font-medium" onClick={connectDrive} disabled={drivePickBusy}>
+                            {drivePickBusy ? 'Opening picker…' : 'Connect Drive…'}
+                        </button>
+                    </>
+                )}
+                {driveErr && <div className="text-red-600 text-xs">{driveErr}</div>}
+            </div>
+
+            <div className="bg-white rounded-lg border p-4 space-y-2 text-sm text-slate-600">
+                <h3 className="font-semibold text-slate-900">Rules in effect</h3>
+                <p>Total required: <strong>{TOTAL_CREDITS_REQUIRED}</strong>. Carry-over cap: <strong>{CARRYOVER_TOTAL_MAX}</strong>.</p>
+                <p>Per-category requirements: {CATEGORIES.filter(c => c.required > 0).map(c => `${c.label} (${c.required})`).join(', ')}.</p>
+                <p className="text-xs">Edit constants near the top of <code>index.html</code> to change rules.</p>
+            </div>
+
+            {msg && <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm">{msg}</div>}
+        </section>
+    );
+}
+
+// ============================================================
+// APP SHELL
+// ============================================================
+function App({ user, db, onSignOut }) {
+    const [state, setState] = useState(emptyState());
+    const [loading, setLoading] = useState(true);
+    const [tab, setTab] = useState('dashboard');
+    const [editingEntry, setEditingEntry] = useState(null); // entry being edited; or {} for new
+    const [carryInOpen, setCarryInOpen] = useState(false);
+    const [carryOutOpen, setCarryOutOpen] = useState(false);
+
+    // Load on mount
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const loaded = await loadUserState(db, user.uid);
+            // Bootstrap: if no cycles, seed with the user's current cycle
+            if (loaded.cycles.length === 0) {
+                const c = defaultCycleForToday();
+                loaded.cycles = [c];
+                loaded.settings = { ...loaded.settings, activeCycleId: c.id };
+                await saveUserState(db, user.uid, loaded);
+            }
+            if (!cancelled) {
+                setState(loaded);
+                setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [db, user.uid]);
+
+    // Save on every change (debounced lightly)
+    const saveTimer = useRef(null);
+    function persist(next) {
+        setState(next);
+        clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(() => {
+            saveUserState(db, user.uid, next).catch(err => console.error('Save failed', err));
+        }, 400);
+    }
+
+    const activeCycleId = state.settings?.activeCycleId || state.cycles[0]?.id;
+    const activeCycle = state.cycles.find(c => c.id === activeCycleId);
+
+    function setActiveCycle(id) {
+        persist({ ...state, settings: { ...state.settings, activeCycleId: id } });
+    }
+    function upsertEntry(entry) {
+        const exists = state.entries.some(e => e.id === entry.id);
+        const entries = exists ? state.entries.map(e => e.id === entry.id ? entry : e) : [...state.entries, entry];
+        persist({ ...state, entries });
+    }
+    function deleteEntry(id) {
+        persist({ ...state, entries: state.entries.filter(e => e.id !== id) });
+    }
+    function addCycle(c) { persist({ ...state, cycles: [...state.cycles, c] }); }
+    function updateCycle(c) { persist({ ...state, cycles: state.cycles.map(x => x.id === c.id ? c : x) }); }
+    function deleteCycle(id) { persist({ ...state, cycles: state.cycles.filter(c => c.id !== id) }); }
+
+    function saveCarryIn({ carryIn, carryInApplied }) {
+        const next = { ...state, cycles: state.cycles.map(c => c.id === activeCycleId ? { ...c, carryIn, carryInApplied } : c) };
+        persist(next);
+        setCarryInOpen(false);
+    }
+
+    function applyCarryOut({ allocation, targetCycleId }) {
+        const next = { ...state, cycles: state.cycles.map(c => {
+            if (c.id === targetCycleId) {
+                return { ...c, carryIn: { ...allocation }, carryInApplied: c.carryInApplied || {} };
+            }
+            return c;
+        }) };
+        persist(next);
+        setCarryOutOpen(false);
+    }
+
+    if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading…</div>;
+
+    return (
+        <div className="min-h-screen">
+            <header className="bg-white border-b sticky top-0 z-10">
+                <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
+                    <div className="font-bold text-lg">⚖️ CLE Tracker</div>
+                    <select className="border rounded px-2 py-1 text-sm bg-white" value={activeCycleId || ''} onChange={(e) => setActiveCycle(e.target.value)}>
+                        {state.cycles.map(c => <option key={c.id} value={c.id}>{c.label || `${c.startDate} → ${c.endDate}`}</option>)}
+                    </select>
+                    <nav className="ml-auto flex gap-1">
+                        {[
+                            ['dashboard', 'Dashboard'],
+                            ['entries',   'Entries'],
+                            ['cycles',    'Cycles'],
+                            ['settings',  'Settings']
+                        ].map(([id, label]) => (
+                            <button key={id}
+                                className={`px-3 py-1.5 rounded text-sm font-medium ${tab === id ? 'bg-slate-900 text-white' : 'hover:bg-slate-100 text-slate-700'}`}
+                                onClick={() => setTab(id)}>
+                                {label}
+                            </button>
+                        ))}
+                    </nav>
+                </div>
+            </header>
+
+            <main className="max-w-6xl mx-auto">
+                {tab === 'dashboard' && (
+                    <CycleDashboard
+                        cycle={activeCycle}
+                        entries={state.entries}
+                        onEditCarryIn={() => setCarryInOpen(true)}
+                        onPlanCarryOut={() => setCarryOutOpen(true)}
+                    />
+                )}
+                {tab === 'entries' && (
+                    <EntriesView
+                        entries={state.entries}
+                        cycles={state.cycles}
+                        activeCycleId={activeCycleId}
+                        onAdd={() => setEditingEntry({})}
+                        onEdit={(e) => setEditingEntry(e)}
+                        onDelete={deleteEntry}
+                    />
+                )}
+                {tab === 'cycles' && (
+                    <CyclesManager
+                        cycles={state.cycles}
+                        activeCycleId={activeCycleId}
+                        onSetActive={setActiveCycle}
+                        onAdd={addCycle}
+                        onUpdate={updateCycle}
+                        onDelete={deleteCycle}
+                    />
+                )}
+                {tab === 'settings' && (
+                    <SettingsView
+                        state={state}
+                        onReplaceState={(s) => persist(s)}
+                        user={user}
+                        onSignOut={onSignOut}
+                    />
+                )}
+            </main>
+
+            <Modal open={!!editingEntry} onClose={() => setEditingEntry(null)} wide>
+                {editingEntry && (
+                    <EntryForm
+                        entry={editingEntry.id ? editingEntry : null}
+                        cycles={state.cycles}
+                        defaultCycleId={activeCycleId}
+                        onSave={(e) => { upsertEntry(e); setEditingEntry(null); }}
+                        onCancel={() => setEditingEntry(null)}
+                    />
+                )}
+            </Modal>
+
+            <Modal open={carryInOpen} onClose={() => setCarryInOpen(false)}>
+                {activeCycle && <CarryInEditor cycle={activeCycle} onSave={saveCarryIn} onClose={() => setCarryInOpen(false)} />}
+            </Modal>
+
+            <Modal open={carryOutOpen} onClose={() => setCarryOutOpen(false)} wide>
+                {activeCycle && <CarryOutPlanner cycle={activeCycle} cycles={state.cycles} entries={state.entries}
+                    onApply={applyCarryOut} onClose={() => setCarryOutOpen(false)} />}
+            </Modal>
+        </div>
+    );
+}
+
+// ============================================================
+// ROOT
+// ============================================================
+function Root() {
+    const [cfg, setCfg] = useState(loadFbConfig);
+    const [user, setUser] = useState(null);
+    const [authReady, setAuthReady] = useState(false);
+    const [authErr, setAuthErr] = useState('');
+
+    useEffect(() => {
+        if (!cfg) { setAuthReady(true); return; }
+        const { auth } = ensureFb(cfg);
+        const unsub = auth.onAuthStateChanged((u) => {
+            if (u && !ALLOWED_EMAILS.includes(u.email)) {
+                auth.signOut();
+                setAuthErr(`Account ${u.email} is not authorized.`);
+                setUser(null);
+            } else {
+                setUser(u);
+                setAuthErr('');
+            }
+            setAuthReady(true);
+        });
+        return () => unsub();
+    }, [cfg]);
+
+    if (!cfg) return <FirebaseSetup onSaved={(c) => setCfg(c)} />;
+    if (!authReady) return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading…</div>;
+    if (!user) return (
+        <div>
+            {authErr && <div className="bg-red-100 border-b border-red-300 text-red-800 text-sm p-2 text-center">{authErr}</div>}
+            <SignIn auth={_fbAuth} />
+        </div>
+    );
+    return <App user={user} db={_fbDb} onSignOut={() => _fbAuth.signOut()} />;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Root />);
+    </script>
+</body>
+</html>
