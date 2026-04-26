@@ -70,7 +70,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.13';
+const APP_VERSION = 'v0.15';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -255,6 +255,7 @@ const KNOWN_CYCLES = [
 
 // ============================================================
 // SEED DATA — Taly's historical CLE entries, carry-in, per-cycle categories.
+// Credits rounded to 0.5 increments (NY rule).
 // ============================================================
 const SEED_DATA = {
   "cycles": [
@@ -666,7 +667,7 @@ const SEED_DATA = {
       "credits": [
         {
           "categoryId": "areas_of_professional_practice",
-          "credits": 0.4
+          "credits": 0.5
         },
         {
           "categoryId": "cybersecurity_ethics",
@@ -2401,18 +2402,18 @@ function CycleSection({ cycle, entries, isCurrent, open, onToggle, openCats, onT
                                                             <table className="w-full text-xs bg-white rounded border">
                                                                 <thead className="bg-slate-50 text-slate-600">
                                                                     <tr>
-                                                                        <th className="text-left p-2">Date</th>
+                                                                        <th className="text-left p-2 whitespace-nowrap">Date</th>
                                                                         <th className="text-left p-2">Course</th>
-                                                                        <th className="text-left p-2">Status</th>
-                                                                        <th className="text-right p-2">Credits</th>
-                                                                        <th className="text-right p-2">Total</th>
+                                                                        <th className="text-left p-2 whitespace-nowrap">Status</th>
+                                                                        <th className="text-right p-2 whitespace-nowrap">Credits</th>
+                                                                        <th className="text-right p-2 whitespace-nowrap">Total</th>
                                                                         <th></th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
                                                                     {contribs.map(({ entry, credits }) => (
                                                                         <tr key={entry.id} className="border-t">
-                                                                            <td className="p-2 num">{entry.date}</td>
+                                                                            <td className="p-2 num whitespace-nowrap">{entry.date}</td>
                                                                             <td className="p-2">{entry.name}</td>
                                                                             <td className="p-2"><StatusBadge status={entry.status} /></td>
                                                                             <td className="p-2 text-right num font-semibold">{fmt(credits)}</td>
