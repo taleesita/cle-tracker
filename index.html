@@ -70,7 +70,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.15';
+const APP_VERSION = 'v0.16';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -84,7 +84,7 @@ const CATEGORIES = [
     { id: 'ethics',                          label: 'Ethics & Professionalism',                                 required: 4, carryCap: 4 },
     { id: 'diversity',                       label: 'Diversity, Inclusion & Elimination of Bias',                required: 1, carryCap: 1 },
     { id: 'cybersecurity_general',           label: 'Cybersecurity, Privacy & Data Protection — General',        required: 1, carryCap: 1 },
-    { id: 'cybersecurity_ethics',            label: 'Cybersecurity, Privacy & Data Protection — Ethics',         required: 0, carryCap: 4, note: 'Counts toward Ethics requirement.' },
+    { id: 'cybersecurity_ethics',            label: 'Cybersecurity, Privacy & Data Protection — Ethics',         required: 0, carryCap: 4, countsToward: 'ethics', countsTowardCap: 3, note: 'Up to 3 credits count toward the Ethics requirement.' },
     { id: 'skills',                          label: 'Skills',                                                    required: 0, carryCap: 6 },
     { id: 'law_practice_management',         label: 'Law Practice Management',                                   required: 0, carryCap: 6 },
     { id: 'areas_of_professional_practice',  label: 'Areas of Professional Practice',                            required: 0, carryCap: 6 }
@@ -135,7 +135,8 @@ function getCategoriesForCycle(cycle) {
 function categoryStatus(cycle, entries) {
     const earned = earnedByCategory(entries, cycle.id);
     const out = {};
-    for (const cat of getCategoriesForCycle(cycle)) {
+    const cycleCats = getCategoriesForCycle(cycle);
+    for (const cat of cycleCats) {
         const required = cat.required;
         const carryIn = Number(cycle.carryIn?.[cat.id] || 0);
         const carryInApplied = Number(cycle.carryInApplied?.[cat.id] || 0);
@@ -143,7 +144,25 @@ function categoryStatus(cycle, entries) {
         const applied = carryInApplied + e;
         const available = carryIn + e;
         const stillNeeded = Math.max(0, required - applied);
-        out[cat.id] = { categoryId: cat.id, required, carryIn, carryInApplied, earned: e, applied, available, stillNeeded };
+        out[cat.id] = { categoryId: cat.id, required, carryIn, carryInApplied, earned: e, applied, available, stillNeeded, appliedTowardOther: 0 };
+    }
+    // Apply "countsToward" relationships (e.g., cybersecurity-ethics counts toward ethics, capped at 3).
+    // Fall back to global CATEGORY_BY_ID since older seed cycles may not have these fields baked in.
+    for (const cat of cycleCats) {
+        const global = CATEGORY_BY_ID[cat.id];
+        const ct = cat.countsToward || global?.countsToward;
+        const ctCap = cat.countsTowardCap ?? global?.countsTowardCap ?? Infinity;
+        if (!ct) continue;
+        const target = out[ct];
+        if (!target) continue;
+        const source = out[cat.id];
+        if (!source) continue;
+        const contribution = source.applied;
+        const capped = Math.min(contribution, ctCap);
+        if (capped <= 0) continue;
+        target.applied = (target.applied || 0) + capped;
+        target.stillNeeded = Math.max(0, target.required - target.applied);
+        source.appliedTowardOther = capped;
     }
     return out;
 }
@@ -2445,27 +2464,55 @@ function CycleSection({ cycle, entries, isCurrent, open, onToggle, openCats, onT
 // ENTRIES
 // ============================================================
 function EntriesView({ entries, cycles, activeCycleId, onAdd, onEdit, onDelete }) {
-    const [filterCycle, setFilterCycle] = useState(activeCycleId || 'all');
     const [filterStatus, setFilterStatus] = useState('all');
     const [search, setSearch] = useState('');
-    const [confirmDel, setConfirmDel] = useState(null); // entry id
+    const [confirmDel, setConfirmDel] = useState(null);
     useEffect(() => {
         if (!confirmDel) return;
         const t = setTimeout(() => setConfirmDel(null), 4000);
         return () => clearTimeout(t);
     }, [confirmDel]);
 
-    const visible = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        return entries
-            .filter(e => filterCycle === 'all' || e.cycleId === filterCycle)
-            .filter(e => filterStatus === 'all' || e.status === filterStatus)
-            .filter(e => !q || (e.name || '').toLowerCase().includes(q) || (e.location || '').toLowerCase().includes(q))
-            .sort((a, b) => (a.date < b.date ? 1 : -1));
-    }, [entries, filterCycle, filterStatus, search]);
+    const today = new Date().toISOString().slice(0, 10);
+    const sortedCycles = useMemo(() => [...cycles].sort((a, b) => (a.startDate < b.startDate ? 1 : -1)), [cycles]);
+    const currentCycleId = useMemo(() => {
+        const inRange = cycles.find(c => today >= c.startDate && today <= c.endDate);
+        return (inRange || sortedCycles[0])?.id;
+    }, [cycles, sortedCycles, today]);
+
+    const [openCycles, setOpenCycles] = useState(() => new Set([currentCycleId].filter(Boolean)));
+    useEffect(() => {
+        if (currentCycleId && openCycles.size === 0) setOpenCycles(new Set([currentCycleId]));
+    }, [currentCycleId]); // eslint-disable-line
+
+    function toggleCycle(id) {
+        setOpenCycles(s => { const ns = new Set(s); ns.has(id) ? ns.delete(id) : ns.add(id); return ns; });
+    }
+    function expandAll() { setOpenCycles(new Set(cycles.map(c => c.id))); }
+    function collapseAll() { setOpenCycles(new Set()); }
+
+    // If user is searching, auto-expand any cycle with hits.
+    const q = search.trim().toLowerCase();
+    const filterFn = (e) =>
+        (filterStatus === 'all' || e.status === filterStatus) &&
+        (!q || (e.name || '').toLowerCase().includes(q) || (e.location || '').toLowerCase().includes(q));
+
+    // Cycle id → matching entries (sorted newest entry first).
+    const entriesByCycle = useMemo(() => {
+        const m = {};
+        for (const c of cycles) m[c.id] = [];
+        for (const e of entries) if (filterFn(e)) (m[e.cycleId] = m[e.cycleId] || []).push(e);
+        for (const k of Object.keys(m)) m[k].sort((a, b) => (a.date < b.date ? 1 : -1));
+        return m;
+    }, [entries, cycles, filterStatus, q]);
+
+    // While searching, show cycles with hits expanded.
+    const cyclesToOpen = q ? new Set(Object.entries(entriesByCycle).filter(([_, list]) => list.length > 0).map(([id]) => id)) : openCycles;
+
+    if (cycles.length === 0) return <div className="p-6 text-slate-500">No cycles yet.</div>;
 
     return (
-        <section className="p-4 sm:p-6 space-y-4">
+        <section className="p-4 sm:p-6 space-y-3">
             <header className="flex flex-wrap items-center gap-2">
                 <h2 className="text-2xl font-bold mr-auto">CLE entries</h2>
                 <input
@@ -2474,74 +2521,108 @@ function EntriesView({ entries, cycles, activeCycleId, onAdd, onEdit, onDelete }
                     onChange={(e) => setSearch(e.target.value)}
                     className="border rounded px-2 py-1 text-sm bg-white"
                 />
-                <select className="border rounded px-2 py-1 text-sm bg-white" value={filterCycle} onChange={(e) => setFilterCycle(e.target.value)}>
-                    <option value="all">All cycles</option>
-                    {cycles.map(c => <option key={c.id} value={c.id}>{c.label || `${c.startDate} → ${c.endDate}`}</option>)}
-                </select>
                 <select className="border rounded px-2 py-1 text-sm bg-white" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                     <option value="all">All statuses</option>
                     {ENTRY_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </select>
                 <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-sm font-semibold" onClick={onAdd}>+ Add CLE</button>
             </header>
-
-            <div className="bg-white rounded-lg border overflow-x-auto">
-                <table className="w-full text-sm">
-                    <thead className="bg-slate-50 text-slate-700">
-                        <tr>
-                            <th className="text-left p-2 px-3">Date</th>
-                            <th className="text-left p-2 px-3">Name</th>
-                            <th className="text-left p-2 px-3">Categories</th>
-                            <th className="text-right p-2 px-3">Credits</th>
-                            <th className="text-left p-2 px-3">Location</th>
-                            <th className="text-left p-2 px-3">Juris.</th>
-                            <th className="text-left p-2 px-3">Status</th>
-                            <th className="text-left p-2 px-3">Materials</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {visible.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-slate-400">No entries match.</td></tr>}
-                        {visible.map(e => {
-                            const ec = entryCreditsByCategory(e);
-                            const total = entryTotalCredits(e);
-                            return (
-                                <tr key={e.id} className="border-t hover:bg-slate-50">
-                                    <td className="p-2 px-3 num">{e.date}</td>
-                                    <td className="p-2 px-3">
-                                        <button className="text-indigo-700 hover:underline font-medium text-left" onClick={() => onEdit(e)}>{e.name}</button>
-                                    </td>
-                                    <td className="p-2 px-3">
-                                        <div className="flex flex-wrap gap-1">
-                                            {Object.entries(ec).map(([catId, n]) => (
-                                                <span key={catId} className="text-xs bg-slate-100 rounded px-1.5 py-0.5">
-                                                    {(CATEGORY_BY_ID[catId]?.label || catId).split('—')[0].trim()}: <strong>{n}</strong>
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </td>
-                                    <td className="p-2 px-3 text-right num font-semibold">{total}</td>
-                                    <td className="p-2 px-3">{e.location}</td>
-                                    <td className="p-2 px-3">{e.jurisdiction}</td>
-                                    <td className="p-2 px-3"><StatusBadge status={e.status} /></td>
-                                    <td className="p-2 px-3">
-                                        {e.driveUrl
-                                            ? <a className="text-indigo-700 hover:underline" href={e.driveUrl} target="_blank" rel="noreferrer">Open</a>
-                                            : <span className="text-slate-300">—</span>}
-                                    </td>
-                                    <td className="p-2 px-3 text-right">
-                                        {confirmDel === e.id ? (
-                                            <button className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-semibold" onClick={() => { onDelete(e.id); setConfirmDel(null); }}>Confirm delete</button>
-                                        ) : (
-                                            <button className="text-red-600 hover:underline text-xs" onClick={() => setConfirmDel(e.id)}>delete</button>
-                                        )}
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
+            <div className="flex justify-end gap-3 text-xs">
+                <button className="text-indigo-700 hover:underline" onClick={expandAll}>Expand all</button>
+                <span className="text-slate-300">·</span>
+                <button className="text-indigo-700 hover:underline" onClick={collapseAll}>Collapse all</button>
             </div>
+
+            {sortedCycles.map(cycle => {
+                const cycleEntries = entriesByCycle[cycle.id] || [];
+                const isCurrent = cycle.id === currentCycleId;
+                const isOpen = cyclesToOpen.has(cycle.id);
+                const totalCredits = cycleEntries.reduce((a, e) => a + entryTotalCredits(e), 0);
+
+                return (
+                    <div key={cycle.id} className={`bg-white rounded-lg border overflow-hidden ${isCurrent ? 'ring-1 ring-indigo-200' : ''}`}>
+                        <button onClick={() => toggleCycle(cycle.id)} className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-slate-50 text-left">
+                            <span className="text-slate-400 text-xs w-3">{isOpen ? '▼' : '▶'}</span>
+                            <div className="flex-1 min-w-0">
+                                <div className="font-bold flex items-center gap-2 flex-wrap">
+                                    <span>{cycle.label || `${cycle.startDate} → ${cycle.endDate}`}</span>
+                                    {isCurrent && <span className="text-xs bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-medium">current</span>}
+                                </div>
+                                <div className="text-xs text-slate-500">{cycle.startDate} → {cycle.endDate}</div>
+                            </div>
+                            <div className="text-sm flex items-center gap-3 flex-shrink-0">
+                                <span className="text-slate-500">{cycleEntries.length} {cycleEntries.length === 1 ? 'entry' : 'entries'}</span>
+                                <span className="num"><strong>{fmt(totalCredits)}</strong> <span className="text-slate-400">credits</span></span>
+                            </div>
+                        </button>
+
+                        {isOpen && (
+                            <div className="border-t overflow-x-auto">
+                                {cycleEntries.length === 0 ? (
+                                    <div className="p-6 text-center text-slate-400 text-sm">
+                                        {q || filterStatus !== 'all' ? 'No entries match the current filters in this cycle.' : 'No entries in this cycle yet.'}
+                                    </div>
+                                ) : (
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-50 text-slate-700">
+                                            <tr>
+                                                <th className="text-left p-2 px-3 whitespace-nowrap">Date</th>
+                                                <th className="text-left p-2 px-3">Name</th>
+                                                <th className="text-left p-2 px-3">Categories</th>
+                                                <th className="text-right p-2 px-3 whitespace-nowrap">Credits</th>
+                                                <th className="text-left p-2 px-3">Location</th>
+                                                <th className="text-left p-2 px-3 whitespace-nowrap">Juris.</th>
+                                                <th className="text-left p-2 px-3">Status</th>
+                                                <th className="text-left p-2 px-3 whitespace-nowrap">Materials</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {cycleEntries.map(e => {
+                                                const ec = entryCreditsByCategory(e);
+                                                const total = entryTotalCredits(e);
+                                                return (
+                                                    <tr key={e.id} className="border-t hover:bg-slate-50">
+                                                        <td className="p-2 px-3 num whitespace-nowrap">{e.date}</td>
+                                                        <td className="p-2 px-3">
+                                                            <button className="text-indigo-700 hover:underline font-medium text-left" onClick={() => onEdit(e)}>{e.name}</button>
+                                                        </td>
+                                                        <td className="p-2 px-3">
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {Object.entries(ec).map(([catId, n]) => (
+                                                                    <span key={catId} className="text-xs bg-slate-100 rounded px-1.5 py-0.5">
+                                                                        {(CATEGORY_BY_ID[catId]?.label || catId).split('—')[0].trim()}: <strong>{n}</strong>
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-2 px-3 text-right num font-semibold">{total}</td>
+                                                        <td className="p-2 px-3">{e.location}</td>
+                                                        <td className="p-2 px-3">{e.jurisdiction}</td>
+                                                        <td className="p-2 px-3"><StatusBadge status={e.status} /></td>
+                                                        <td className="p-2 px-3">
+                                                            {e.driveUrl
+                                                                ? <a className="text-indigo-700 hover:underline" href={e.driveUrl} target="_blank" rel="noreferrer">Open</a>
+                                                                : <span className="text-slate-300">—</span>}
+                                                        </td>
+                                                        <td className="p-2 px-3 text-right">
+                                                            {confirmDel === e.id ? (
+                                                                <button className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-semibold" onClick={() => { onDelete(e.id); setConfirmDel(null); }}>Confirm delete</button>
+                                                            ) : (
+                                                                <button className="text-red-600 hover:underline text-xs" onClick={() => setConfirmDel(e.id)}>delete</button>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
         </section>
     );
 }
