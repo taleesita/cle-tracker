@@ -72,7 +72,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.24';
+const APP_VERSION = 'v0.25';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -251,7 +251,11 @@ function validateEntry(entry) {
     if (!entry.name?.trim()) errs.push('Name is required.');
     if (!entry.date) errs.push('Date is required.');
     if (!entry.cycleId) errs.push('Cycle is required.');
-    if (entryTotalCredits(entry) <= 0) errs.push('At least one credit must be logged.');
+    // Credits are only required once you have the cert. "attended" (no cert yet) can be saved
+    // without credit amounts — fill them in when the cert arrives.
+    if (entry.status !== 'attended' && entryTotalCredits(entry) <= 0) {
+        errs.push('At least one credit must be logged once the cert is received.');
+    }
     return errs;
 }
 
