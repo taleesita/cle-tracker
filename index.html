@@ -72,7 +72,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.28';
+const APP_VERSION = 'v0.29';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -2069,11 +2069,24 @@ async function loadUserState(db, uid) {
     };
 }
 
+// Deep-strip undefined values (Firestore rejects them).
+function stripUndefined(v) {
+    if (v === undefined) return undefined;
+    if (v === null || typeof v !== 'object') return v;
+    if (Array.isArray(v)) return v.map(stripUndefined).filter(x => x !== undefined);
+    const out = {};
+    for (const [k, val] of Object.entries(v)) {
+        const clean = stripUndefined(val);
+        if (clean !== undefined) out[k] = clean;
+    }
+    return out;
+}
 async function saveUserState(db, uid, state) {
-    await userDocRef(db, uid).set({
-        ...state,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: false });
+    // Strip undefined from user state first, then attach the serverTimestamp sentinel (which
+    // must not be recursed into).
+    const clean = stripUndefined(state);
+    clean.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+    await userDocRef(db, uid).set(clean, { merge: false });
 }
 
 function emptyState() {
@@ -3182,16 +3195,24 @@ function CyclesManager({ cycles, activeCycleId, onSetActive, onAdd, onUpdate, on
         endDate = `${ey}-${String(sm).padStart(2,'0')}-${String(sd).padStart(2,'0')}`;
         label = `${sy}-${ey} Cycle`;
         // Inherit categories from latest cycle if it has them (so the new one matches structure).
-        const categories = latest?.categories?.length ? latest.categories.map(c => ({ ...c })) : undefined;
-        setEditing({ id: uid(), label, startDate, endDate, totalRequired: TOTAL_CREDITS_REQUIRED, carryIn: {}, carryInApplied: {}, categories, _new: true });
+        const draft = { id: uid(), label, startDate, endDate, totalRequired: TOTAL_CREDITS_REQUIRED, carryIn: {}, carryInApplied: {}, _new: true };
+        if (latest?.categories?.length) draft.categories = latest.categories.map(c => ({ ...c }));
+        setEditing(draft);
     }
     const [saving, setSaving] = useState(false);
     const [saveErr, setSaveErr] = useState('');
     async function save() {
         setSaving(true); setSaveErr('');
         try {
-            if (editing._new) await onAdd({ ...editing, _new: undefined });
-            else await onUpdate(editing);
+            // Strip internal-only + undefined fields (Firestore rejects undefined).
+            const clean = {};
+            for (const [k, v] of Object.entries(editing)) {
+                if (k === '_new') continue;
+                if (v === undefined) continue;
+                clean[k] = v;
+            }
+            if (editing._new) await onAdd(clean);
+            else await onUpdate(clean);
             setEditing(null);
         } catch (err) {
             setSaveErr('Save failed: ' + (err?.message || err));
