@@ -72,7 +72,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.25';
+const APP_VERSION = 'v0.26';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -3262,38 +3262,47 @@ function SettingsView({ state, onReplaceState, user, onSignOut }) {
     const [confirmSeed, setConfirmSeed] = useState(false);
 
     function loadHistoricalSeed() {
-        const today = new Date().toISOString().slice(0, 10);
-        const activeCycleId = (SEED_DATA.cycles.find(c => today >= c.startDate && today <= c.endDate) || SEED_DATA.cycles[SEED_DATA.cycles.length - 1])?.id;
-
-        // Preserve user-added fields (driveUrl, custom notes, status changes) on entries that
-        // already exist by ID. Stable seed IDs (seed-entry-N) make this safe across reseeds.
-        const existingById = new Map((state.entries || []).map(e => [e.id, e]));
+        // Preserve user-added fields on entries by ID.
+        const existingEntriesById = new Map((state.entries || []).map(e => [e.id, e]));
         let preservedDriveLinks = 0;
         const mergedEntries = SEED_DATA.entries.map(seedEntry => {
-            const existing = existingById.get(seedEntry.id);
+            const existing = existingEntriesById.get(seedEntry.id);
             if (!existing) return { ...seedEntry };
             const merged = { ...seedEntry };
             if (existing.driveUrl) { merged.driveUrl = existing.driveUrl; preservedDriveLinks++; }
-            // Preserve user note appended after the auto-generated one (rough heuristic: longer = edited)
             if (existing.notes && existing.notes !== seedEntry.notes && existing.notes.length > (seedEntry.notes || '').length) {
                 merged.notes = existing.notes;
             }
-            // Preserve a status change if user moved it OFF 'counted' (e.g., back to attended for re-review)
             if (existing.status && existing.status !== 'counted' && seedEntry.status === 'counted') {
                 merged.status = existing.status;
             }
             return merged;
         });
+        // Also carry through any non-seed entries the user added by hand.
+        const seedEntryIds = new Set(SEED_DATA.entries.map(e => e.id));
+        const userAddedEntries = (state.entries || []).filter(e => !seedEntryIds.has(e.id));
 
-        // Preserve Drive parent folder + token (those live in localStorage, not state, so unaffected).
+        // Preserve any user-added cycles (e.g., a manually created 2026-2028) that aren't in the seed.
+        // Match by startDate/endDate — seed cycles overwrite same-date cycles, other cycles pass through.
+        const seedCycleKeys = new Set(SEED_DATA.cycles.map(c => `${c.startDate}|${c.endDate}`));
+        const userAddedCycles = (state.cycles || []).filter(c => !seedCycleKeys.has(`${c.startDate}|${c.endDate}`));
+        const allCycles = [...SEED_DATA.cycles.map(c => ({ ...c })), ...userAddedCycles];
+
+        const today = new Date().toISOString().slice(0, 10);
+        const activeCycleId = (allCycles.find(c => today >= c.startDate && today <= c.endDate) || allCycles[allCycles.length - 1])?.id;
+
         onReplaceState({
             schemaVersion: 1,
-            cycles: SEED_DATA.cycles.map(c => ({ ...c })),
-            entries: mergedEntries,
+            cycles: allCycles,
+            entries: [...mergedEntries, ...userAddedEntries],
             settings: { ...(state.settings || {}), activeCycleId, _seededAt: new Date().toISOString() }
         });
         setConfirmSeed(false);
-        setMsg(`Loaded ${SEED_DATA.entries.length} entries across ${SEED_DATA.cycles.length} cycles${preservedDriveLinks > 0 ? ` · preserved ${preservedDriveLinks} Drive link${preservedDriveLinks === 1 ? '' : 's'}` : ''}.`);
+        const bits = [`Loaded ${SEED_DATA.entries.length} historical entries across ${SEED_DATA.cycles.length} cycles`];
+        if (userAddedCycles.length) bits.push(`preserved ${userAddedCycles.length} custom cycle${userAddedCycles.length === 1 ? '' : 's'}`);
+        if (userAddedEntries.length) bits.push(`preserved ${userAddedEntries.length} custom entr${userAddedEntries.length === 1 ? 'y' : 'ies'}`);
+        if (preservedDriveLinks) bits.push(`preserved ${preservedDriveLinks} Drive link${preservedDriveLinks === 1 ? '' : 's'}`);
+        setMsg(bits.join(' · ') + '.');
     }
 
     async function importJson(e) {
