@@ -72,7 +72,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.26';
+const APP_VERSION = 'v0.27';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -3727,15 +3727,40 @@ function App({ user, db, onSignOut }) {
         return () => { cancelled = true; };
     }, [db, user.uid]);
 
-    // Save on every change (debounced lightly)
+    // Save on every change. Debounced for typing bursts; immediate for structural changes (add/delete cycles or entries).
     const saveTimer = useRef(null);
-    function persist(next) {
+    const pendingSave = useRef(null); // holds the latest state pending write, so beforeunload can flush.
+    function persist(next, { immediate = false } = {}) {
         setState(next);
+        pendingSave.current = next;
         clearTimeout(saveTimer.current);
-        saveTimer.current = setTimeout(() => {
-            saveUserState(db, user.uid, next).catch(err => console.error('Save failed', err));
-        }, 400);
+        const doSave = () => {
+            const toSave = pendingSave.current;
+            pendingSave.current = null;
+            saveUserState(db, user.uid, toSave).catch(err => console.error('Save failed', err));
+        };
+        if (immediate) doSave();
+        else saveTimer.current = setTimeout(doSave, 400);
     }
+
+    // Flush pending saves on tab close / hide so structural edits don't get lost mid-debounce.
+    useEffect(() => {
+        function flush() {
+            if (pendingSave.current) {
+                clearTimeout(saveTimer.current);
+                const toSave = pendingSave.current;
+                pendingSave.current = null;
+                saveUserState(db, user.uid, toSave).catch(() => {});
+            }
+        }
+        window.addEventListener('beforeunload', flush);
+        window.addEventListener('pagehide', flush);
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+        return () => {
+            window.removeEventListener('beforeunload', flush);
+            window.removeEventListener('pagehide', flush);
+        };
+    }, [db, user.uid]);
 
     const activeCycleId = state.settings?.activeCycleId || state.cycles[0]?.id;
     const activeCycle = state.cycles.find(c => c.id === activeCycleId);
@@ -3746,14 +3771,15 @@ function App({ user, db, onSignOut }) {
     function upsertEntry(entry) {
         const exists = state.entries.some(e => e.id === entry.id);
         const entries = exists ? state.entries.map(e => e.id === entry.id ? entry : e) : [...state.entries, entry];
-        persist({ ...state, entries });
+        persist({ ...state, entries }, { immediate: !exists });  // new entries save immediately
     }
     function deleteEntry(id) {
-        persist({ ...state, entries: state.entries.filter(e => e.id !== id) });
+        persist({ ...state, entries: state.entries.filter(e => e.id !== id) }, { immediate: true });
     }
-    function addCycle(c) { persist({ ...state, cycles: [...state.cycles, c] }); }
-    function updateCycle(c) { persist({ ...state, cycles: state.cycles.map(x => x.id === c.id ? c : x) }); }
-    function deleteCycle(id) { persist({ ...state, cycles: state.cycles.filter(c => c.id !== id) }); }
+    // Structural cycle changes save immediately (no debounce) — infrequent + high loss cost
+    function addCycle(c) { persist({ ...state, cycles: [...state.cycles, c] }, { immediate: true }); }
+    function updateCycle(c) { persist({ ...state, cycles: state.cycles.map(x => x.id === c.id ? c : x) }, { immediate: true }); }
+    function deleteCycle(id) { persist({ ...state, cycles: state.cycles.filter(c => c.id !== id) }, { immediate: true }); }
 
     function saveCarryIn({ carryIn, carryInApplied }) {
         const next = { ...state, cycles: state.cycles.map(c => c.id === carryInCycleId ? { ...c, carryIn, carryInApplied } : c) };
