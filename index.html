@@ -72,7 +72,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.27';
+const APP_VERSION = 'v0.28';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -3167,12 +3167,37 @@ function CyclesManager({ cycles, activeCycleId, onSetActive, onAdd, onUpdate, on
         return () => clearTimeout(t);
     }, [confirmDel]);
     function startNew() {
-        setEditing({ id: uid(), label: '', startDate: '', endDate: '', totalRequired: TOTAL_CREDITS_REQUIRED, carryIn: {}, carryInApplied: {}, _new: true });
+        // Auto-populate: next cycle starts where the latest existing cycle ends, runs +2yr.
+        // If no cycles exist, default to this year's 7/22 → 7/22 two years out.
+        const latest = [...cycles].sort((a, b) => (a.startDate < b.startDate ? 1 : -1))[0];
+        let startDate, endDate, label;
+        if (latest && latest.endDate) {
+            startDate = latest.endDate;
+        } else {
+            const y = new Date().getFullYear();
+            startDate = `${y}-07-22`;
+        }
+        const [sy, sm, sd] = startDate.split('-').map(Number);
+        const ey = sy + 2;
+        endDate = `${ey}-${String(sm).padStart(2,'0')}-${String(sd).padStart(2,'0')}`;
+        label = `${sy}-${ey} Cycle`;
+        // Inherit categories from latest cycle if it has them (so the new one matches structure).
+        const categories = latest?.categories?.length ? latest.categories.map(c => ({ ...c })) : undefined;
+        setEditing({ id: uid(), label, startDate, endDate, totalRequired: TOTAL_CREDITS_REQUIRED, carryIn: {}, carryInApplied: {}, categories, _new: true });
     }
-    function save() {
-        if (editing._new) onAdd({ ...editing, _new: undefined });
-        else onUpdate(editing);
-        setEditing(null);
+    const [saving, setSaving] = useState(false);
+    const [saveErr, setSaveErr] = useState('');
+    async function save() {
+        setSaving(true); setSaveErr('');
+        try {
+            if (editing._new) await onAdd({ ...editing, _new: undefined });
+            else await onUpdate(editing);
+            setEditing(null);
+        } catch (err) {
+            setSaveErr('Save failed: ' + (err?.message || err));
+        } finally {
+            setSaving(false);
+        }
     }
 
     return (
@@ -3227,9 +3252,10 @@ function CyclesManager({ cycles, activeCycleId, onSetActive, onAdd, onUpdate, on
                             <Field label="End date"><input type="date" className="border rounded p-2 w-full" value={editing.endDate} onChange={(e) => setEditing({ ...editing, endDate: e.target.value })} /></Field>
                             <Field label="Total required"><input type="number" step="0.5" className="border rounded p-2 w-full num" value={editing.totalRequired || TOTAL_CREDITS_REQUIRED} onChange={(e) => setEditing({ ...editing, totalRequired: Number(e.target.value) || 0 })} /></Field>
                         </div>
+                        {saveErr && <div className="text-red-600 text-sm">{saveErr}</div>}
                         <div className="flex gap-2 justify-end pt-2 border-t">
-                            <button className="px-3 py-2 rounded border" onClick={() => setEditing(null)}>Cancel</button>
-                            <button className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold" onClick={save}>Save</button>
+                            <button className="px-3 py-2 rounded border" onClick={() => setEditing(null)} disabled={saving}>Cancel</button>
+                            <button className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
                         </div>
                     </div>
                 )}
@@ -3737,10 +3763,11 @@ function App({ user, db, onSignOut }) {
         const doSave = () => {
             const toSave = pendingSave.current;
             pendingSave.current = null;
-            saveUserState(db, user.uid, toSave).catch(err => console.error('Save failed', err));
+            return saveUserState(db, user.uid, toSave).catch(err => { console.error('Save failed', err); throw err; });
         };
-        if (immediate) doSave();
-        else saveTimer.current = setTimeout(doSave, 400);
+        if (immediate) return doSave();
+        saveTimer.current = setTimeout(doSave, 400);
+        return Promise.resolve();
     }
 
     // Flush pending saves on tab close / hide so structural edits don't get lost mid-debounce.
@@ -3777,9 +3804,9 @@ function App({ user, db, onSignOut }) {
         persist({ ...state, entries: state.entries.filter(e => e.id !== id) }, { immediate: true });
     }
     // Structural cycle changes save immediately (no debounce) — infrequent + high loss cost
-    function addCycle(c) { persist({ ...state, cycles: [...state.cycles, c] }, { immediate: true }); }
-    function updateCycle(c) { persist({ ...state, cycles: state.cycles.map(x => x.id === c.id ? c : x) }, { immediate: true }); }
-    function deleteCycle(id) { persist({ ...state, cycles: state.cycles.filter(c => c.id !== id) }, { immediate: true }); }
+    function addCycle(c) { return persist({ ...state, cycles: [...state.cycles, c] }, { immediate: true }); }
+    function updateCycle(c) { return persist({ ...state, cycles: state.cycles.map(x => x.id === c.id ? c : x) }, { immediate: true }); }
+    function deleteCycle(id) { return persist({ ...state, cycles: state.cycles.filter(c => c.id !== id) }, { immediate: true }); }
 
     function saveCarryIn({ carryIn, carryInApplied }) {
         const next = { ...state, cycles: state.cycles.map(c => c.id === carryInCycleId ? { ...c, carryIn, carryInApplied } : c) };
