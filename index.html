@@ -72,7 +72,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.29';
+const APP_VERSION = 'v0.32';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -95,8 +95,8 @@ const CATEGORY_BY_ID = Object.fromEntries(CATEGORIES.map(c => [c.id, c]));
 
 const ENTRY_STATUSES = [
     { id: 'attended',      label: 'Attended (no cert yet)' },
-    { id: 'cert_received', label: 'Cert received' },
-    { id: 'counted',       label: 'Counted toward cycle' }
+    { id: 'cert_received', label: 'Cert received (not counted toward cycle)' },
+    { id: 'counted',       label: 'Cert received (counted toward cycle)' }
 ];
 
 // ============================================================
@@ -2047,7 +2047,17 @@ function ensureFb(cfg) {
         _fbApp = firebase.initializeApp(cfg);
         _fbAuth = firebase.auth();
         _fbDb = firebase.firestore();
-        try { _fbDb.enablePersistence({ synchronizeTabs: true }); } catch {}
+        // Offline persistence intentionally disabled — Firestore stores query state in localStorage
+        // which fills up the browser's 5-10MB quota over time and starts throwing QuotaExceededError.
+        // Data payloads are small and loads are fast; online-only is fine.
+        // If a prior build enabled it, nuke any leftover Firestore localStorage keys so they don't
+        // keep blowing up the quota on this page load.
+        try {
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith('firestore_')) localStorage.removeItem(k);
+            }
+        } catch {}
     }
     return { auth: _fbAuth, db: _fbDb };
 }
@@ -2130,11 +2140,11 @@ function Stat({ label, value, tone = 'default', sublabel }) {
 
 function StatusBadge({ status }) {
     const cfg = {
-        attended:      { label: 'Attended',      cls: 'bg-slate-100 text-slate-700' },
-        cert_received: { label: 'Cert received', cls: 'bg-blue-100 text-blue-800' },
-        counted:       { label: 'Counted',       cls: 'bg-emerald-100 text-emerald-800' }
-    }[status] || { label: status, cls: 'bg-slate-100' };
-    return <span className={`text-xs font-medium px-2 py-0.5 rounded ${cfg.cls}`}>{cfg.label}</span>;
+        attended:      { label: 'Attended',          cls: 'bg-slate-100 text-slate-700', title: 'Attended, no cert yet — not counted toward cycle' },
+        cert_received: { label: 'Cert (not counted)', cls: 'bg-amber-100 text-amber-800', title: 'Cert received but not yet counted toward cycle' },
+        counted:       { label: 'Cert (counted)',    cls: 'bg-emerald-100 text-emerald-800', title: 'Cert received and counted toward cycle' }
+    }[status] || { label: status, cls: 'bg-slate-100', title: status };
+    return <span className={`text-xs font-medium px-2 py-0.5 rounded ${cfg.cls}`} title={cfg.title}>{cfg.label}</span>;
 }
 
 function Modal({ open, onClose, children, wide }) {
@@ -2871,7 +2881,7 @@ function EntryForm({ entry, cycles, defaultCycleId, onSave, onCancel }) {
         date: entry?.date || new Date().toISOString().slice(0, 10),
         location: entry?.location || '',
         jurisdiction: entry?.jurisdiction || 'NY',
-        status: entry?.status || 'attended',
+        status: entry?.status || 'counted',
         credits: entry?.credits?.length ? entry.credits : [{ categoryId: 'areas_of_professional_practice', credits: 0 }],
         driveUrl: entry?.driveUrl || '',
         notes: entry?.notes || ''
@@ -2918,6 +2928,11 @@ function EntryForm({ entry, cycles, defaultCycleId, onSave, onCancel }) {
                     <select className="border rounded p-2 w-full bg-white" value={draft.status} onChange={(e) => set('status', e.target.value)}>
                         {ENTRY_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
                     </select>
+                    {draft.status !== 'counted' && (
+                        <div className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                            ⚠ Credits will <strong>not</strong> count toward the cycle until status is <em>"Cert received (counted toward cycle)"</em>.
+                        </div>
+                    )}
                 </Field>
                 <Field label="Drive folder" full>
                     <DriveFolderField draft={draft} setDraft={setDraft} />
