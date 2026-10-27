@@ -72,7 +72,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.32';
+const APP_VERSION = 'v0.33';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -2881,7 +2881,7 @@ function EntryForm({ entry, cycles, defaultCycleId, onSave, onCancel }) {
         date: entry?.date || new Date().toISOString().slice(0, 10),
         location: entry?.location || '',
         jurisdiction: entry?.jurisdiction || 'NY',
-        status: entry?.status || 'counted',
+        status: entry?.status || 'attended',
         credits: entry?.credits?.length ? entry.credits : [{ categoryId: 'areas_of_professional_practice', credits: 0 }],
         driveUrl: entry?.driveUrl || '',
         notes: entry?.notes || ''
