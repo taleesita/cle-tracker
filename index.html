@@ -72,7 +72,7 @@ const DRIVE_PARENT_KEY = 'cle_drive_parent_folder';
 const DRIVE_TOKEN_KEY  = 'cle_drive_token_v2'; // bumped: scope changed from drive.file → drive
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
-const APP_VERSION = 'v0.33';
+const APP_VERSION = 'v0.34';
 
 // ============================================================
 // NY CLE RULES (experienced attorneys, per NYSBA)
@@ -2986,22 +2986,31 @@ function CarryInEditor({ cycle, onSave, onClose }) {
     const [carryIn, setCarryIn] = useState({ ...(cycle.carryIn || {}) });
     const [carryInApplied, setCarryInApplied] = useState({ ...(cycle.carryInApplied || {}) });
     const cycleCats = getCategoriesForCycle(cycle);
+    const catById = Object.fromEntries(cycleCats.map(c => [c.id, c]));
     const totalIn = Object.values(carryIn).reduce((a, b) => a + Number(b || 0), 0);
     const totalApplied = Object.values(carryInApplied).reduce((a, b) => a + Number(b || 0), 0);
     const errs = [];
-    if (totalIn > CARRYOVER_TOTAL_MAX) errs.push(`Total carry-in (${totalIn}) exceeds the ${CARRYOVER_TOTAL_MAX}-credit cap.`);
+    // "Available" is the full pool from the prior cycle — uncapped. "Applied this cycle" is
+    // what actually counts, and that's where the NY 6-credit (+ per-category) caps bind.
+    if (totalApplied > CARRYOVER_TOTAL_MAX) {
+        errs.push(`Total "Applied this cycle" (${totalApplied}) exceeds NY's ${CARRYOVER_TOTAL_MAX}-credit carry-over cap.`);
+    }
     for (const cat of cycleCats) {
         const a = carryInApplied[cat.id] || 0;
         const c = carryIn[cat.id] || 0;
         if (a > c) errs.push(`${cat.label}: applied (${a}) > available (${c}).`);
+        // Per-category caps for mandatory categories (ethics 4, D&I 1, cyber-general 1).
+        if (cat.required > 0 && cat.carryCap !== undefined && a > cat.carryCap) {
+            errs.push(`${cat.label}: applied (${a}) exceeds NY per-category carry cap of ${cat.carryCap}.`);
+        }
     }
 
     return (
         <div className="p-6 space-y-3">
             <h2 className="text-xl font-bold">Carry-in for {cycle.label || cycle.startDate}</h2>
             <p className="text-sm text-slate-600">
-                <strong>Available</strong> = what was carried over from the previous cycle.{' '}
-                <strong>Applied</strong> = how much you choose to use in this cycle.
+                <strong>Available</strong> = pool of credits from the previous cycle's surplus (whatever you had).{' '}
+                <strong>Applied this cycle</strong> = how much of that pool you actually use — capped at {CARRYOVER_TOTAL_MAX} total across all categories (plus per-category caps for mandatory categories).
             </p>
             <table className="w-full text-sm border rounded">
                 <thead className="bg-slate-50">
@@ -3029,8 +3038,8 @@ function CarryInEditor({ cycle, onSave, onClose }) {
                 <tfoot>
                     <tr className="border-t font-semibold bg-slate-50">
                         <td className="p-2">Total</td>
-                        <td className={`p-2 text-right num ${totalIn > CARRYOVER_TOTAL_MAX ? 'text-amber-700' : ''}`}>{totalIn}</td>
-                        <td className="p-2 text-right num">{totalApplied}</td>
+                        <td className="p-2 text-right num">{fmt(totalIn)}</td>
+                        <td className={`p-2 text-right num ${totalApplied > CARRYOVER_TOTAL_MAX ? 'text-amber-700' : ''}`}>{fmt(totalApplied)} / {CARRYOVER_TOTAL_MAX}</td>
                     </tr>
                 </tfoot>
             </table>
